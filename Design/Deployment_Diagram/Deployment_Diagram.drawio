@@ -1,0 +1,64 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36" version="28.2.5">
+  <diagram name="Page-1" id="KZ7VCY7iMIaLaTHoL1WB">
+    <mxGraphModel dx="1226" dy="660" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-16" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="ehAtSsjX9OmKdaytLIGy-1" target="ehAtSsjX9OmKdaytLIGy-15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-1" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;&lt;b&gt;Mobile Device&lt;/b&gt;&lt;/font&gt;" style="verticalAlign=top;align=center;shape=cube;size=10;direction=south;fontStyle=0;html=1;boundedLbl=1;spacingLeft=5;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="111" y="138" width="322" height="249" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-3" value="&lt;span&gt;Fog-Of-War App&lt;/span&gt;" style="html=1;align=center;verticalAlign=middle;dashed=0;whiteSpace=wrap;fontStyle=0" vertex="1" parent="1">
+          <mxGeometry x="132" y="195" width="104" height="43" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-14" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" edge="1" parent="1" source="ehAtSsjX9OmKdaytLIGy-7" target="ehAtSsjX9OmKdaytLIGy-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-7" value="&lt;span&gt;SQLite Database&lt;/span&gt;" style="html=1;align=center;verticalAlign=middle;dashed=0;whiteSpace=wrap;fontStyle=0" vertex="1" parent="1">
+          <mxGeometry x="271" y="195" width="104" height="43" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="ehAtSsjX9OmKdaytLIGy-8" target="ehAtSsjX9OmKdaytLIGy-7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-8" value="&lt;span&gt;QR Code Module&lt;/span&gt;" style="html=1;align=center;verticalAlign=middle;dashed=0;whiteSpace=wrap;fontStyle=0" vertex="1" parent="1">
+          <mxGeometry x="271" y="286" width="104" height="43" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-13" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="ehAtSsjX9OmKdaytLIGy-9" target="ehAtSsjX9OmKdaytLIGy-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-9" value="&lt;span&gt;GPS Sensor&lt;/span&gt;" style="html=1;align=center;verticalAlign=middle;dashed=0;whiteSpace=wrap;fontStyle=0" vertex="1" parent="1">
+          <mxGeometry x="132" y="286" width="104" height="43" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-22" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="ehAtSsjX9OmKdaytLIGy-15" target="ehAtSsjX9OmKdaytLIGy-18">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-15" value="&lt;span style=&quot;font-size: 18px;&quot;&gt;&lt;b&gt;OpenStreetMaps&lt;/b&gt;&lt;/span&gt;" style="verticalAlign=top;align=center;shape=cube;size=10;direction=south;fontStyle=0;html=1;boundedLbl=1;spacingLeft=5;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="179.5" y="423" width="185" height="127" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-17" value="&lt;span&gt;Map Tile Service&lt;/span&gt;" style="html=1;align=center;verticalAlign=middle;dashed=0;whiteSpace=wrap;fontStyle=0" vertex="1" parent="1">
+          <mxGeometry x="215" y="480" width="104" height="43" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-18" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;&lt;b&gt;Mobile Device (Friend)&lt;/b&gt;&lt;/font&gt;" style="verticalAlign=top;align=center;shape=cube;size=10;direction=south;fontStyle=0;html=1;boundedLbl=1;spacingLeft=5;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="447" y="412" width="322" height="149" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-21" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" edge="1" parent="1" source="ehAtSsjX9OmKdaytLIGy-19" target="ehAtSsjX9OmKdaytLIGy-20">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-19" value="&lt;span&gt;Fog-Of-War App&lt;/span&gt;" style="html=1;align=center;verticalAlign=middle;dashed=0;whiteSpace=wrap;fontStyle=0" vertex="1" parent="1">
+          <mxGeometry x="473" y="485" width="104" height="43" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-20" value="&lt;span&gt;SQLite Database&lt;/span&gt;" style="html=1;align=center;verticalAlign=middle;dashed=0;whiteSpace=wrap;fontStyle=0" vertex="1" parent="1">
+          <mxGeometry x="623" y="485" width="104" height="43" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-23" value="QR Code Scan" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="375" y="493" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="ehAtSsjX9OmKdaytLIGy-24" value="Map Tile Requests" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="271" y="390" width="116" height="30" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
