@@ -20,6 +20,11 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider;
 
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.os.Looper;
+
 import androidx.core.content.res.ResourcesCompat;
 import androidx.preference.PreferenceManager;
 
@@ -36,6 +41,7 @@ public class MainActivity extends AppCompatActivity {
     private MyLocationNewOverlay myLocationOverlay;
     private IMapController mapController;
     private FloatingActionButton centerLocationButton;
+    private FogOverlay fogOverlay;
 
 
     // --- Permission Handling ---
@@ -99,6 +105,10 @@ public class MainActivity extends AppCompatActivity {
 
         // Add the location overlay to the map's list of overlays
         map.getOverlays().add(myLocationOverlay);
+
+        // Add the fog overlay to the map's list of overlays
+        fogOverlay = new FogOverlay(100.0f);
+        map.getOverlays().add(fogOverlay);
 
         // Floating Action Button Setup
         centerLocationButton = findViewById(R.id.centerLocationButton);
@@ -165,19 +175,62 @@ public class MainActivity extends AppCompatActivity {
         // Set the overlay to automatically follow the user's location updates
         myLocationOverlay.enableFollowLocation();
 
-        // Use runOnFirstFix to center the map immediately when the *first* location
-        // fix is received, ensuring the user starts at their current spot.
+        // Reveal fog at the user's first known location
         myLocationOverlay.runOnFirstFix(() -> {
-            // Ensure UI updates (like map movement) happen on the main thread
             runOnUiThread(() -> {
                 GeoPoint location = myLocationOverlay.getMyLocation();
                 if (location != null) {
                     mapController.animateTo(location);
-                    mapController.setZoom(16.0); // Zoom in closer on user's spot
+                    mapController.setZoom(16.0);
+                    fogOverlay.reveal(location);   // reveal initial location
+                    map.invalidate();
                 }
             });
         });
+
+        myLocationOverlay.setDrawAccuracyEnabled(true);
+        myLocationOverlay.setPersonHotspot(0.0f, 0.0f);
+
+        // ✅ This part sets up continuous revealing as the user moves
+        GpsMyLocationProvider locationProvider = (GpsMyLocationProvider) myLocationOverlay.getMyLocationProvider();
+
+// Set min update interval and distance
+        locationProvider.setLocationUpdateMinTime(2000);      // every 2 seconds
+        locationProvider.setLocationUpdateMinDistance(2);     // every 2 meters
+
+// ✅ Listen for location updates properly
+        LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+
+        LocationListener locationListener = new LocationListener() {
+            @Override
+            public void onLocationChanged(Location location) {
+                runOnUiThread(() -> {
+                    GeoPoint newPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
+                    fogOverlay.reveal(newPoint);
+                    map.invalidate();
+                });
+            }
+
+            @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
+            @Override public void onProviderEnabled(String provider) {}
+            @Override public void onProviderDisabled(String provider) {}
+        };
+
+        try {
+            locationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    2000,   // min time (ms)
+                    2,      // min distance (meters)
+                    locationListener,
+                    Looper.getMainLooper()
+            );
+        } catch (SecurityException e) {
+            e.printStackTrace();
+        }
+
+
     }
+
 
     // --- Map Lifecycle Management ---
     // --- Paused, Resumed, or Destroyed (closed) ---
