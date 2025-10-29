@@ -1,6 +1,7 @@
 package com.terra.FogOfEarth;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -37,6 +38,7 @@ public class MainActivity extends AppCompatActivity {
     private MyLocationNewOverlay myLocationOverlay;
     private IMapController mapController;
     private FloatingActionButton centerLocationButton;
+    private FloatingActionButton settingButton;
     private FogOverlay fogOverlay;
 
     private Bitmap userMarkerBitmap;
@@ -84,11 +86,20 @@ public class MainActivity extends AppCompatActivity {
 
         // Fog overlay
         fogOverlay = new FogOverlay(100.0f);
+        fogOverlay.loadRevealedAreas(this);
         map.getOverlays().add(fogOverlay);
 
-        // Floating Action Button
+        // Center Location Button
         centerLocationButton = findViewById(R.id.centerLocationButton);
         centerLocationButton.setOnClickListener(v -> centerMapOnCurrentLocation());
+
+        // Setting Open Button
+        settingButton = findViewById(R.id.settingButton);
+        settingButton.setOnClickListener(v -> {
+            // Open settings activity
+            Intent intent = new Intent(MainActivity.this, SettingsActivity.class);
+            startActivity(intent);
+        });
 
         // Add a **single overlay** to draw the user icon centered
         map.getOverlays().add(new org.osmdroid.views.overlay.Overlay() {
@@ -205,6 +216,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        fogOverlay.saveRevealedAreas(this);
         if (map != null) {
             Configuration.getInstance().save(this, PreferenceManager.getDefaultSharedPreferences(this));
             map.onPause();
@@ -215,6 +227,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        fogOverlay.saveRevealedAreas(this);
         if (map != null) map.onDetach();
     }
 }
