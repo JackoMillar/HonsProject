@@ -2,6 +2,7 @@ package com.terra.FogOfEarth;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -85,7 +86,19 @@ public class MainActivity extends AppCompatActivity {
         map.getOverlays().add(myLocationOverlay);
 
         // Fog overlay
-        fogOverlay = new FogOverlay(100.0f);
+        fogOverlay = new FogOverlay(100.0f, 0);
+
+        SharedPreferences prefs = getSharedPreferences("fog_data", MODE_PRIVATE);
+        prefs.edit().remove("revealed_points").apply();
+        String sharedFogJson = prefs.getString("shared_fog_overlay", null);
+        // Shared fog (friends' explored areas)
+        FogOverlay sharedFogOverlay = new FogOverlay(500.0f, -1999999999); // stronger opacity (~70%)
+        sharedFogOverlay.loadFromJson(sharedFogJson);
+        sharedFogOverlay.loadRevealedAreas(this);
+        map.getOverlays().add(sharedFogOverlay);
+
+// Your personal fog
+        fogOverlay = new FogOverlay(100.0f, 210); // full opacity for your own fog
         fogOverlay.loadRevealedAreas(this);
         map.getOverlays().add(fogOverlay);
 
