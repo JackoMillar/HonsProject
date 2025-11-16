@@ -97,7 +97,7 @@ public class MainActivity extends AppCompatActivity {
         sharedFogOverlay.loadRevealedAreas(this);
         map.getOverlays().add(sharedFogOverlay);
 
-// Your personal fog
+        // Users personal fog
         fogOverlay = new FogOverlay(100.0f, 210); // full opacity for your own fog
         fogOverlay.loadRevealedAreas(this);
         map.getOverlays().add(fogOverlay);
@@ -109,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
         // Setting Open Button
         settingButton = findViewById(R.id.settingButton);
         settingButton.setOnClickListener(v -> {
-            // Open settings activity
+            // Open Settings activity
             Intent intent = new Intent(MainActivity.this, SettingsActivity.class);
             startActivity(intent);
         });
