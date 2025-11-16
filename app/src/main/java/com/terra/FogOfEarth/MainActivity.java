@@ -114,7 +114,7 @@ public class MainActivity extends AppCompatActivity {
             startActivity(intent);
         });
 
-        // Add a **single overlay** to draw the user icon centered
+        // Add a overlay to draw the user icon centered
         map.getOverlays().add(new org.osmdroid.views.overlay.Overlay() {
             @Override
             public void draw(Canvas canvas, MapView mapView, boolean shadow) {

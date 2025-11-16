@@ -61,7 +61,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         returnButton = findViewById(R.id.returnButton);
         returnButton.setOnClickListener(v -> {
-            // Open settings activity
+            // Open MainActivity activity
             Intent intent = new Intent(SettingsActivity.this, MainActivity.class);
             startActivity(intent);
         });
