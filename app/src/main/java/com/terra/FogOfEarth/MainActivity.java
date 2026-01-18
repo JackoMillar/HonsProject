@@ -44,6 +44,10 @@ public class MainActivity extends AppCompatActivity {
 
     private Bitmap userMarkerBitmap;
 
+    private LocationManager locationManager;
+    private LocationListener locationListener;
+
+
     // Permission launcher
     private final ActivityResultLauncher<String[]> requestPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), isGranted -> {
@@ -187,8 +191,9 @@ public class MainActivity extends AppCompatActivity {
         }));
 
         // Location updates for fog
-        LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        LocationListener locationListener = new LocationListener() {
+        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+
+        locationListener = new LocationListener() {
             @Override
             public void onLocationChanged(Location location) {
                 runOnUiThread(() -> {
@@ -229,18 +234,48 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        fogOverlay.saveRevealedAreas(this);
+
+        // Save fog progress
+        if (fogOverlay != null) {
+            fogOverlay.saveRevealedAreas(this);
+        }
+
+        // Stop GPS updates (IMPORTANT)
+        if (locationManager != null && locationListener != null) {
+            locationManager.removeUpdates(locationListener);
+        }
+
+        // Pause map + location overlay
         if (map != null) {
             Configuration.getInstance().save(this, PreferenceManager.getDefaultSharedPreferences(this));
             map.onPause();
-            if (myLocationOverlay != null) myLocationOverlay.disableMyLocation();
+        }
+
+        if (myLocationOverlay != null) {
+            myLocationOverlay.disableMyLocation();
+            myLocationOverlay.disableFollowLocation();
         }
     }
+
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        fogOverlay.saveRevealedAreas(this);
-        if (map != null) map.onDetach();
+
+        // Save fog progress
+        if (fogOverlay != null) {
+            fogOverlay.saveRevealedAreas(this);
+        }
+
+        // Stop GPS updates
+        if (locationManager != null && locationListener != null) {
+            locationManager.removeUpdates(locationListener);
+        }
+
+        // Detach map
+        if (map != null) {
+            map.onDetach();
+        }
     }
+
 }

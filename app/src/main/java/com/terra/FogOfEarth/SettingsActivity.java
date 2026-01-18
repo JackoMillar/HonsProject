@@ -60,11 +60,8 @@ public class SettingsActivity extends AppCompatActivity {
         });
 
         returnButton = findViewById(R.id.returnButton);
-        returnButton.setOnClickListener(v -> {
-            // Open settings activity
-            Intent intent = new Intent(SettingsActivity.this, MainActivity.class);
-            startActivity(intent);
-        });
+        returnButton.setOnClickListener(v -> finish());
+
 
         SharedPreferences prefs = getSharedPreferences("fog_data", MODE_PRIVATE);
         String content = prefs.getString("revealed_points", null);
@@ -73,9 +70,10 @@ public class SettingsActivity extends AppCompatActivity {
             content = "{\"message\":\"No progress saved yet\"}";
         }
 
+        int qrSize = 900;
         QRCodeWriter writer = new QRCodeWriter();
         try {
-            BitMatrix bitMatrix = writer.encode(content, BarcodeFormat.QR_CODE, 4000, 4000);
+            BitMatrix bitMatrix = writer.encode(content, BarcodeFormat.QR_CODE, qrSize, qrSize);
             int width = bitMatrix.getWidth();
             int height = bitMatrix.getHeight();
             Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565);
@@ -87,8 +85,10 @@ public class SettingsActivity extends AppCompatActivity {
             }
 
             ((ImageView) findViewById(R.id.imgQr)).setImageBitmap(bmp);
+        } catch (IllegalArgumentException e) {
+            Toast.makeText(this, "Shared data too large for a QR code.", Toast.LENGTH_LONG).show();
         } catch (WriterException e) {
-            e.printStackTrace();
+            Toast.makeText(this, "Failed to generate QR.", Toast.LENGTH_LONG).show();
         }
 
     }
