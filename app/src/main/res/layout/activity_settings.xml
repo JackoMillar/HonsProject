@@ -22,15 +22,22 @@
         app:layout_constraintStart_toStartOf="parent" />
 
     <!-- Scan Map Button -->
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/scanMapButton"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:src="@drawable/placeholder_qr"
-        android:contentDescription="Scan Map QR"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_margin="16dp" />
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginTop="12dp"
+        android:text="Scan shared map"
+        app:icon="@drawable/placeholder_qr"
+        app:iconGravity="textStart"
+        app:cornerRadius="16dp"
+        app:layout_constraintTop_toBottomOf="@id/returnButton"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+
 
 
     <!-- "Share Map" Label (Commented Out) -->

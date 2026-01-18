@@ -29,6 +29,9 @@ import com.journeyapps.barcodescanner.ScanOptions;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import com.google.android.material.button.MaterialButton;
+
+
 public class SettingsActivity extends AppCompatActivity {
 
     private ImageButton returnButton;
@@ -67,7 +70,7 @@ public class SettingsActivity extends AppCompatActivity {
             return insets;
         });
 
-        FloatingActionButton scanMapButton = findViewById(R.id.scanMapButton);
+        MaterialButton scanMapButton = findViewById(R.id.scanMapButton);
         scanMapButton.setOnClickListener(v -> launchQrScanner());
 
         returnButton = findViewById(R.id.returnButton);
