@@ -2,7 +2,6 @@ package com.terra.FogOfEarth;
 
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -40,13 +39,15 @@ public class MainActivity extends AppCompatActivity {
     private IMapController mapController;
     private FloatingActionButton centerLocationButton;
     private FloatingActionButton settingButton;
+
+    // SINGLE fog overlay (primary + shared)
     private FogOverlay fogOverlay;
 
     private Bitmap userMarkerBitmap;
 
+    // GPS updates (so we can stop them onPause)
     private LocationManager locationManager;
     private LocationListener locationListener;
-
 
     // Permission launcher
     private final ActivityResultLauncher<String[]> requestPermissionLauncher =
@@ -89,21 +90,15 @@ public class MainActivity extends AppCompatActivity {
 
         map.getOverlays().add(myLocationOverlay);
 
-        // Fog overlay
-        fogOverlay = new FogOverlay(100.0f, 0);
-
-        SharedPreferences prefs = getSharedPreferences("fog_data", MODE_PRIVATE);
-        prefs.edit().remove("revealed_points").apply();
-        String sharedFogJson = prefs.getString("shared_fog_overlay", null);
-        // Shared fog (friends' explored areas)
-        FogOverlay sharedFogOverlay = new FogOverlay(500.0f, -1999999999); // stronger opacity (~70%)
-        sharedFogOverlay.loadFromJson(sharedFogJson);
-        sharedFogOverlay.loadRevealedAreas(this);
-        map.getOverlays().add(sharedFogOverlay);
-
-        // Users personal fog
-        fogOverlay = new FogOverlay(100.0f, 210); // full opacity for your own fog
-        fogOverlay.loadRevealedAreas(this);
+        // --- Fog overlay (PRIMARY + SHARED) ---
+        fogOverlay = new FogOverlay(
+                100.0f, // primary radius
+                500.0f, // shared radius
+                255,    // fog alpha (solid)
+                170,    // shared clear alpha (tweak 120-200)
+                4.5     // min distance
+        );
+        fogOverlay.loadAll(this);
         map.getOverlays().add(fogOverlay);
 
         // Center Location Button
@@ -112,13 +107,9 @@ public class MainActivity extends AppCompatActivity {
 
         // Setting Open Button
         settingButton = findViewById(R.id.settingButton);
-        settingButton.setOnClickListener(v -> {
-            // Open Settings activity
-            Intent intent = new Intent(MainActivity.this, SettingsActivity.class);
-            startActivity(intent);
-        });
+        settingButton.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, SettingsActivity.class)));
 
-        // Add a overlay to draw the user icon centered
+        // Draw the user icon centered
         map.getOverlays().add(new org.osmdroid.views.overlay.Overlay() {
             @Override
             public void draw(Canvas canvas, MapView mapView, boolean shadow) {
@@ -185,7 +176,9 @@ public class MainActivity extends AppCompatActivity {
             if (location != null) {
                 mapController.animateTo(location);
                 mapController.setZoom(16.0);
-                fogOverlay.reveal(location);
+
+                // Reveal PRIMARY fog
+                fogOverlay.revealPrimary(location);
                 map.invalidate();
             }
         }));
@@ -198,7 +191,7 @@ public class MainActivity extends AppCompatActivity {
             public void onLocationChanged(Location location) {
                 runOnUiThread(() -> {
                     GeoPoint newPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
-                    fogOverlay.reveal(newPoint);
+                    fogOverlay.revealPrimary(newPoint);
                     map.invalidate();
                 });
             }
@@ -229,23 +222,28 @@ public class MainActivity extends AppCompatActivity {
             map.onResume();
             if (myLocationOverlay != null) myLocationOverlay.enableMyLocation();
         }
+
+        // Reload fog layers (in case Settings imported shared)
+        if (fogOverlay != null) fogOverlay.loadAll(this);
+
+        // Restart GPS updates if permission granted
+        checkLocationPermission();
+
+        if (map != null) map.invalidate();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
 
-        // Save fog progress
-        if (fogOverlay != null) {
-            fogOverlay.saveRevealedAreas(this);
-        }
+        // Save fog to JSON DB
+        if (fogOverlay != null) fogOverlay.saveAll(this);
 
-        // Stop GPS updates (IMPORTANT)
+        // Stop GPS updates
         if (locationManager != null && locationListener != null) {
             locationManager.removeUpdates(locationListener);
         }
 
-        // Pause map + location overlay
         if (map != null) {
             Configuration.getInstance().save(this, PreferenceManager.getDefaultSharedPreferences(this));
             map.onPause();
@@ -257,25 +255,16 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-
     @Override
     protected void onDestroy() {
         super.onDestroy();
 
-        // Save fog progress
-        if (fogOverlay != null) {
-            fogOverlay.saveRevealedAreas(this);
-        }
+        if (fogOverlay != null) fogOverlay.saveAll(this);
 
-        // Stop GPS updates
         if (locationManager != null && locationListener != null) {
             locationManager.removeUpdates(locationListener);
         }
 
-        // Detach map
-        if (map != null) {
-            map.onDetach();
-        }
+        if (map != null) map.onDetach();
     }
-
 }
