@@ -1,7 +1,9 @@
 package com.terra.FogOfEarth;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.PorterDuff;
@@ -16,21 +18,24 @@ import org.osmdroid.views.overlay.Overlay;
 
 import java.util.ArrayList;
 import java.util.List;
-import android.graphics.Bitmap;
-import android.graphics.Color;
 
 public class FogOverlay extends Overlay {
 
+    // Mask so overlapping shared circles DON'T stack / get clearer
     private Bitmap sharedMaskBitmap;
     private Canvas sharedMaskCanvas;
-    private final Paint sharedMaskPaint = new Paint(Paint.ANTI_ALIAS_FLAG); // draws circles into mask
-    private final Paint sharedApplyPaint = new Paint(Paint.ANTI_ALIAS_FLAG); // applies mask onto fog
+
+    // Paint used to draw circles into the mask (must be fully opaque)
+    private final Paint sharedMaskPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    // Paint used to apply the mask onto the fog layer at a fixed strength
+    private final Paint sharedApplyPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
     private final Paint fogPaint;
-    private final Paint sharedEraserPaint;   // partial clear
     private final Paint primaryEraserPaint;  // full clear
 
     private final List<GeoPoint> primaryPoints = new ArrayList<>();
-    private final List<GeoPoint> sharedPoints  = new ArrayList<>();
+    private final List<GeoPoint> sharedPoints = new ArrayList<>();
 
     private final float primaryRadiusMeters;
     private final float sharedRadiusMeters;
@@ -40,7 +45,7 @@ public class FogOverlay extends Overlay {
             float primaryRadiusMeters,
             float sharedRadiusMeters,
             int fogAlpha,              // 255 = solid fog
-            int sharedClearAlpha,      // e.g. 120–200 (partial clear strength)
+            int sharedClearAlpha,      // e.g. 120–200 (fixed partial clear strength)
             double minDistanceMeters
     ) {
         super();
@@ -49,22 +54,23 @@ public class FogOverlay extends Overlay {
         this.minDistanceMeters = minDistanceMeters;
 
         fogPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        fogPaint.setColor(0xFF4A5B6C); // opaque base
+        fogPaint.setColor(0xFF4A5B6C); // fully opaque base colour
         fogPaint.setAlpha(fogAlpha);  // 255 = fully solid
         fogPaint.setStyle(Paint.Style.FILL);
 
-        // Use DST_OUT so alpha controls how much fog gets removed
-        sharedEraserPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        sharedEraserPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
-        sharedEraserPaint.setAlpha(sharedClearAlpha);
+        // Mask circles should be fully opaque so overlap doesn't increase intensity
+        sharedMaskPaint.setColor(Color.BLACK);
+        sharedMaskPaint.setStyle(Paint.Style.FILL);
+        sharedMaskPaint.setAlpha(255);
 
+        // Apply the mask ONCE to the fog layer
+        sharedApplyPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
+        sharedApplyPaint.setAlpha(sharedClearAlpha);
+
+        // Primary full clear
         primaryEraserPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         primaryEraserPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
-        primaryEraserPaint.setAlpha(255); // full clear
-
-        sharedApplyPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
-        sharedApplyPaint.setAlpha(sharedClearAlpha); // fixed strength, overlaps won't stack now
-
+        primaryEraserPaint.setAlpha(255);
     }
 
     @Override
@@ -79,16 +85,30 @@ public class FogOverlay extends Overlay {
             layerId = canvas.saveLayer(0, 0, canvas.getWidth(), canvas.getHeight(), null, Canvas.ALL_SAVE_FLAG);
         }
 
-        // 1) Draw solid fog onto this offscreen layer
+        // 1) Draw solid fog onto an offscreen layer
         canvas.drawRect(0, 0, canvas.getWidth(), canvas.getHeight(), fogPaint);
 
-        // 2) Shared partial clears
+        // 2) Build a SHARED mask (union of circles) then apply ONCE so overlaps don't stack
+        int w = canvas.getWidth();
+        int h = canvas.getHeight();
+        if (sharedMaskBitmap == null || sharedMaskBitmap.getWidth() != w || sharedMaskBitmap.getHeight() != h) {
+            sharedMaskBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            sharedMaskCanvas = new Canvas(sharedMaskBitmap);
+        }
+
+        // Clear mask each frame
+        sharedMaskBitmap.eraseColor(Color.TRANSPARENT);
+
+        // Draw shared circles into mask (fully opaque)
         Point sp = new Point();
         for (GeoPoint p : sharedPoints) {
             mapView.getProjection().toPixels(p, sp);
             float rPx = metersToPixels(mapView, p, sharedRadiusMeters);
-            canvas.drawCircle(sp.x, sp.y, rPx, sharedEraserPaint);
+            sharedMaskCanvas.drawCircle(sp.x, sp.y, rPx, sharedMaskPaint);
         }
+
+        // Apply mask once at fixed alpha
+        canvas.drawBitmap(sharedMaskBitmap, 0, 0, sharedApplyPaint);
 
         // 3) Primary full clears (on top)
         for (GeoPoint p : primaryPoints) {
