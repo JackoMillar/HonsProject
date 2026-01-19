@@ -81,14 +81,17 @@ public class MainActivity extends AppCompatActivity {
         myLocationOverlay.enableMyLocation();
         myLocationOverlay.setDrawAccuracyEnabled(true);
 
-        // Load user marker
         Drawable customMarker = ResourcesCompat.getDrawable(getResources(), R.drawable.user_marker, null);
-        if (customMarker != null) {
-            userMarkerBitmap = ((BitmapDrawable) customMarker).getBitmap();
-            myLocationOverlay.setPersonIcon(userMarkerBitmap); // fallback
+        if (customMarker instanceof BitmapDrawable) {
+            Bitmap raw = ((BitmapDrawable) customMarker).getBitmap();
+
+            // Pick your size here (e.g. 28dp / 32dp / 40dp)
+            userMarkerBitmap = scaleBitmapToDp(raw, 64f);
+
+            myLocationOverlay.setPersonIcon(userMarkerBitmap); // fallback (if you still use it)
         }
 
-        map.getOverlays().add(myLocationOverlay);
+        //map.getOverlays().add(myLocationOverlay);
 
         // --- Fog overlay (PRIMARY + SHARED) ---
         fogOverlay = new FogOverlay(
@@ -167,7 +170,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void enableLocationTracking() {
-        myLocationOverlay.enableFollowLocation();
+        myLocationOverlay.disableFollowLocation();
 
         // Reveal fog at first fix
         myLocationOverlay.runOnFirstFix(() -> runOnUiThread(() -> {
@@ -266,4 +269,14 @@ public class MainActivity extends AppCompatActivity {
 
         if (map != null) map.onDetach();
     }
+
+    private int dpToPx(float dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
+    }
+
+    private Bitmap scaleBitmapToDp(Bitmap src, float dpSize) {
+        int px = dpToPx(dpSize);
+        return Bitmap.createScaledBitmap(src, px, px, true);
+    }
+
 }
