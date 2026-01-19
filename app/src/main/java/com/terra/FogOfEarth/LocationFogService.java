@@ -23,13 +23,27 @@ public class LocationFogService extends Service {
 
     private LocationManager locationManager;
     private LocationListener locationListener;
+    private boolean trackingStarted = false;
 
     @Override
     public void onCreate() {
         super.onCreate();
+        // Keep onCreate light. Foreground + tracking starts in onStartCommand.
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
         createChannel();
         startForeground(NOTIF_ID, buildNotification());
 
+        if (!trackingStarted) {
+            trackingStarted = true;
+            startTracking();
+        }
+        return START_STICKY;
+    }
+
+    private void startTracking() {
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
 
         locationListener = new LocationListener() {
@@ -46,14 +60,18 @@ public class LocationFogService extends Service {
         };
 
         try {
-            locationManager.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER,
-                    2000,
-                    2,
-                    locationListener,
-                    Looper.getMainLooper()
-            );
-        } catch (SecurityException ignored) {}
+            if (locationManager != null) {
+                locationManager.requestLocationUpdates(
+                        LocationManager.GPS_PROVIDER,
+                        2000,
+                        2,
+                        locationListener,
+                        Looper.getMainLooper()
+                );
+            }
+        } catch (SecurityException ignored) {
+            // Permission not granted; service stays alive but won't receive updates.
+        }
     }
 
     @Override
@@ -62,6 +80,7 @@ public class LocationFogService extends Service {
         if (locationManager != null && locationListener != null) {
             locationManager.removeUpdates(locationListener);
         }
+        trackingStarted = false;
     }
 
     @Override
@@ -83,7 +102,7 @@ public class LocationFogService extends Service {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("Fog of Earth")
                 .setContentText("Updating explored areas in the background")
-                .setSmallIcon(R.drawable.ic_launcher_foreground) // change if you want
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setOngoing(true)
                 .build();
     }

@@ -287,10 +287,14 @@ public class MainActivity extends AppCompatActivity {
 
     private void startFogService() {
         Intent i = new Intent(this, LocationFogService.class);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            startForegroundService(i);
-        } else {
-            startService(i);
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                startForegroundService(i);
+            } else {
+                startService(i);
+            }
+        } catch (RuntimeException ignored) {
+            // Defensive: avoid crashing if the system temporarily disallows FGS starts.
         }
     }
 
@@ -298,4 +302,11 @@ public class MainActivity extends AppCompatActivity {
         stopService(new Intent(this, LocationFogService.class));
     }
 
+    @Override
+    public void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        // User is actually leaving the app (Home/Recents). Start background tracking here
+        // so we don't start the foreground service when navigating within the app.
+        startFogService();
+    }
 }
