@@ -232,6 +232,8 @@ public class MainActivity extends AppCompatActivity {
         checkLocationPermission();
 
         if (map != null) map.invalidate();
+
+        stopFogService();
     }
 
     @Override
@@ -255,6 +257,8 @@ public class MainActivity extends AppCompatActivity {
             myLocationOverlay.disableMyLocation();
             myLocationOverlay.disableFollowLocation();
         }
+
+        startFogService();
     }
 
     @Override
@@ -268,6 +272,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (map != null) map.onDetach();
+
+        startFogService();
     }
 
     private int dpToPx(float dp) {
@@ -277,6 +283,19 @@ public class MainActivity extends AppCompatActivity {
     private Bitmap scaleBitmapToDp(Bitmap src, float dpSize) {
         int px = dpToPx(dpSize);
         return Bitmap.createScaledBitmap(src, px, px, true);
+    }
+
+    private void startFogService() {
+        Intent i = new Intent(this, LocationFogService.class);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(i);
+        } else {
+            startService(i);
+        }
+    }
+
+    private void stopFogService() {
+        stopService(new Intent(this, LocationFogService.class));
     }
 
 }
