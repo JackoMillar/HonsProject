@@ -18,34 +18,50 @@ import org.osmdroid.util.GeoPoint;
 
 public class LocationFogService extends Service {
 
+    public static final String ACTION_PAUSE = "com.terra.FogOfEarth.action.PAUSE_BG_TRACKING";
+    public static final String ACTION_RESUME = "com.terra.FogOfEarth.action.RESUME_BG_TRACKING";
+
     private static final String CHANNEL_ID = "fog_location";
     private static final int NOTIF_ID = 1001;
 
     private LocationManager locationManager;
     private LocationListener locationListener;
+    private boolean foregroundStarted = false;
     private boolean trackingStarted = false;
-
-    @Override
-    public void onCreate() {
-        super.onCreate();
-        // Keep onCreate light. Foreground + tracking starts in onStartCommand.
-    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         createChannel();
-        startForeground(NOTIF_ID, buildNotification());
 
-        if (!trackingStarted) {
-            trackingStarted = true;
-            startTracking();
+        // Only call startForeground once. Re-calling it during shutdown/background transitions
+        // can throw SecurityException on newer Android versions.
+        if (!foregroundStarted) {
+            try {
+                startForeground(NOTIF_ID, buildNotification());
+                foregroundStarted = true;
+            } catch (SecurityException se) {
+                // System refused starting a LOCATION FGS in the current app state.
+                stopSelf();
+                return START_NOT_STICKY;
+            }
         }
+
+        final String action = intent != null ? intent.getAction() : null;
+        if (ACTION_PAUSE.equals(action)) {
+            stopTracking();
+            return START_STICKY;
+        }
+
+        // Default + RESUME both mean "ensure tracking is active".
+        startTracking();
         return START_STICKY;
     }
 
     private void startTracking() {
-        locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+        if (trackingStarted) return;
+        trackingStarted = true;
 
+        locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         locationListener = new LocationListener() {
             @Override
             public void onLocationChanged(Location location) {
@@ -70,21 +86,32 @@ public class LocationFogService extends Service {
                 );
             }
         } catch (SecurityException ignored) {
-            // Permission not granted; service stays alive but won't receive updates.
+            // No permission; nothing to do.
+        }
+    }
+
+    private void stopTracking() {
+        if (!trackingStarted) return;
+        trackingStarted = false;
+
+        if (locationManager != null && locationListener != null) {
+            try {
+                locationManager.removeUpdates(locationListener);
+            } catch (SecurityException ignored) {
+            }
         }
     }
 
     @Override
     public void onDestroy() {
+        stopTracking();
         super.onDestroy();
-        if (locationManager != null && locationListener != null) {
-            locationManager.removeUpdates(locationListener);
-        }
-        trackingStarted = false;
     }
 
     @Override
-    public IBinder onBind(Intent intent) { return null; }
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
 
     private void createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

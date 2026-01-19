@@ -172,6 +172,10 @@ public class MainActivity extends AppCompatActivity {
     private void enableLocationTracking() {
         myLocationOverlay.disableFollowLocation();
 
+        // Start the foreground location service while the app is in the foreground (eligible state).
+        // This keeps tracking alive even if the Activity is later destroyed.
+        startFogService();
+
         // Reveal fog at first fix
         myLocationOverlay.runOnFirstFix(() -> runOnUiThread(() -> {
             GeoPoint location = myLocationOverlay.getMyLocation();
@@ -233,7 +237,8 @@ public class MainActivity extends AppCompatActivity {
 
         if (map != null) map.invalidate();
 
-        stopFogService();
+        // While the Activity is visible, pause background tracking to avoid double-writes.
+        sendFogServiceCommand(LocationFogService.ACTION_PAUSE);
     }
 
     @Override
@@ -258,7 +263,8 @@ public class MainActivity extends AppCompatActivity {
             myLocationOverlay.disableFollowLocation();
         }
 
-        startFogService();
+        // App is going into the background; resume background tracking.
+        sendFogServiceCommand(LocationFogService.ACTION_RESUME);
     }
 
     @Override
@@ -273,7 +279,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (map != null) map.onDetach();
 
-        startFogService();
+        // Don't restart the service here; it should already be running.
     }
 
     private int dpToPx(float dp) {
@@ -286,7 +292,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startFogService() {
+        sendFogServiceCommand(null);
+    }
+
+    private void sendFogServiceCommand(String action) {
         Intent i = new Intent(this, LocationFogService.class);
+        if (action != null) i.setAction(action);
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 startForegroundService(i);
@@ -298,15 +309,4 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void stopFogService() {
-        stopService(new Intent(this, LocationFogService.class));
-    }
-
-    @Override
-    public void onUserLeaveHint() {
-        super.onUserLeaveHint();
-        // User is actually leaving the app (Home/Recents). Start background tracking here
-        // so we don't start the foreground service when navigating within the app.
-        startFogService();
-    }
 }
