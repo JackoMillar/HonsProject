@@ -77,7 +77,7 @@ public class SettingsActivity extends AppCompatActivity {
         returnButton.setOnClickListener(v -> finish());
 
         // Generate QR from PRIMARY layer points
-        FogOverlay tmp = new FogOverlay(100.0f, 500.0f, 255, 170, 4.5);
+        FogOverlay tmp = new FogOverlay(100.0f, 255, 170, 4.5);
         tmp.loadAll(this);
         String content = tmp.exportPrimaryAsJsonArray();
 
@@ -108,6 +108,16 @@ public class SettingsActivity extends AppCompatActivity {
         } catch (WriterException e) {
             Toast.makeText(this, "Failed to generate QR.", Toast.LENGTH_LONG).show();
         }
+
+        MaterialButton clearCacheButton = findViewById(R.id.clearCacheButton);
+        clearCacheButton.setOnClickListener(v -> {
+            JsonDb.clear(this);
+
+            ((ImageView) findViewById(R.id.imgQr)).setImageResource(R.drawable.placeholder_qr);
+
+            Toast.makeText(this, "Cache cleared.", Toast.LENGTH_SHORT).show();
+        });
+
     }
 
     private void launchQrScanner() {
@@ -164,8 +174,7 @@ public class SettingsActivity extends AppCompatActivity {
 
             // Load existing db -> set shared -> save back
             FogOverlay tmp = new FogOverlay(
-                    100.0f, // primary radius (must match MainActivity)
-                    500.0f, // shared radius
+                    100.0f, // primary radius
                     255,    // solid fog
                     170,    // shared clear strength
                     4.5

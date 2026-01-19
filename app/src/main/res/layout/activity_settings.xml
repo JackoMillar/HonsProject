@@ -37,10 +37,24 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-
-
-
     <!-- "Share Map" Label (Commented Out) -->
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/clearCacheButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="80dp"
+        android:layout_marginEnd="24dp"
+        android:text="Clear Cache"
+        app:cornerRadius="16dp"
+        app:icon="@drawable/placeholder_qr"
+        app:iconGravity="textStart"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.0"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/returnButton" />
+
     <TextView
         android:id="@+id/shareLabel"
         android:layout_width="wrap_content"

@@ -46,4 +46,12 @@ public class JsonDb {
             fos.flush();
         } catch (Exception ignored) {}
     }
+
+    public static void clear(Context context) {
+        File file = new File(context.getFilesDir(), FILE_NAME);
+        if (file.exists()) {
+            file.delete();
+        }
+    }
+
 }
