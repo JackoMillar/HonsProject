@@ -65,7 +65,7 @@ public class MainActivity extends AppCompatActivity {
     // -- Lifecycle Methods --
 
     /**
-     * <p> Called when the activity is first created.</p>
+     * <p>Called when the activity is first created.</p>
      * <p>Initialises and Creates Map & Location Overlay, User's Custom marker</p>
      * <p>Creates and sets the Settings Button and the Center Location Button</p>
      * <p>Checks Location Permission {@link #checkLocationPermission()}</p>

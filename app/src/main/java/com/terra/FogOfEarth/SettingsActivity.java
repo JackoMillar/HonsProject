@@ -18,7 +18,6 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.WriterException;
 import com.google.zxing.common.BitMatrix;
@@ -29,16 +28,16 @@ import com.journeyapps.barcodescanner.ScanOptions;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+
+
 import com.google.android.material.button.MaterialButton;
 
 
 public class SettingsActivity extends AppCompatActivity {
 
-    private ImageButton returnButton;
-
+    // -- QR Scanner --
     // Runtime camera permission
     private ScanOptions pendingScanOptions;
-
 
     private final ActivityResultLauncher<ScanOptions> qrScanLauncher =
             registerForActivityResult(new ScanContract(), result -> {
@@ -48,7 +47,7 @@ public class SettingsActivity extends AppCompatActivity {
                     Toast.makeText(this, "No QR code detected.", Toast.LENGTH_SHORT).show();
                 }
             });
-
+    // Camera permission launcher
     private final ActivityResultLauncher<String> cameraPermLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
                 if (granted && pendingScanOptions != null) {
@@ -58,68 +57,98 @@ public class SettingsActivity extends AppCompatActivity {
                 }
             });
 
+    /**
+     * <p>Called when the activity is first created.</p>
+     * <p>Sets up UI buttons:</p>
+     * <ul>
+     *      <li>{@code  #scanQrButton} launches {@link #launchQrScanner()}</li>
+     *      <li>{@code  #returnButton} returns to the previous activity</li>
+     *      <li>{@code  #clearCacheButton} clears the cached data</li>
+     * </ul>
+     * @param savedInstanceState previously saved state
+     */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_settings);
 
+        // Apply padding so UI content is not hidden
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
 
-        MaterialButton scanMapButton = findViewById(R.id.scanMapButton);
-        scanMapButton.setOnClickListener(v -> launchQrScanner());
+        // Button: launch QR scanner to import map progress from another device
+        MaterialButton scanQrButton = findViewById(R.id.scanMapButton);
+        scanQrButton.setOnClickListener(v -> launchQrScanner());
 
-        returnButton = findViewById(R.id.returnButton);
+        // Button: return to main activity
+        ImageButton returnButton = findViewById(R.id.returnButton);
         returnButton.setOnClickListener(v -> finish());
 
-        // Generate QR from PRIMARY layer points
+        // Generate QR from saved PRIMARY layer points
+        // Load existing db -> set shared -> save back
         FogOverlay tmp = new FogOverlay(100.0f, 255, 170, 4.5);
         tmp.loadAll(this);
         String content = tmp.exportPrimaryAsJsonArray();
-
 
         // If no data, show a tiny message JSON
         if (content == null || content.isEmpty() || content.equals("[]")) {
             content = "{\"message\":\"No progress saved yet\"}";
         }
 
+        // QR image size in pixels
         int qrSize = 900;
+
+        // writer to convert JSON into a QR code
         QRCodeWriter writer = new QRCodeWriter();
         try {
+            // Encode content as a QR code matrix
             BitMatrix bitMatrix = writer.encode(content, BarcodeFormat.QR_CODE, qrSize, qrSize);
+
+            // Create a bitmap to draw the QR code into
             int width = bitMatrix.getWidth();
             int height = bitMatrix.getHeight();
             Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565);
 
+            // Convert the BitMatrix into black and white pixels in the bitmap
             for (int x = 0; x < width; x++) {
                 for (int y = 0; y < height; y++) {
                     bmp.setPixel(x, y, bitMatrix.get(x, y) ? Color.BLACK : Color.WHITE);
                 }
             }
 
+            // Display the generated QR bitmap in the ImageView
             ((ImageView) findViewById(R.id.imgQr)).setImageBitmap(bmp);
 
         } catch (IllegalArgumentException e) {
+            // Throw if content cannot be encoded
             Toast.makeText(this, "Shared data too large for a QR code.", Toast.LENGTH_LONG).show();
         } catch (WriterException e) {
+            // Throw if writer fails to generate QR code
             Toast.makeText(this, "Failed to generate QR.", Toast.LENGTH_LONG).show();
         }
 
+        // Button: clear cached / saved fog data
         MaterialButton clearCacheButton = findViewById(R.id.clearCacheButton);
         clearCacheButton.setOnClickListener(v -> {
+            // Clear stored JSON DB/cache data
             JsonDb.clear(this);
 
+            // Reset the QR Image to a placeholder since progress is now wiped
             ((ImageView) findViewById(R.id.imgQr)).setImageResource(R.drawable.placeholder_qr);
 
+            // Inform user that cache is cleared
             Toast.makeText(this, "Cache cleared.", Toast.LENGTH_SHORT).show();
         });
-
     }
 
+    /**
+     * <p>Launches the QR Scanner Activity</p>
+     * <p>If camera permission is not granted, requests it</p>
+     */
     private void launchQrScanner() {
         ScanOptions options = new ScanOptions();
         options.setPrompt("Scan a shared map QR code");
@@ -129,6 +158,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         pendingScanOptions = options;
 
+        // Checks for permission
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED) {
             qrScanLauncher.launch(options);
@@ -137,30 +167,10 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
-    private String exportPrimaryLayerPointsAsJsonArray() {
-        try {
-            JSONObject root = JsonDb.load(this);
-            JSONObject fog = root.optJSONObject("fog");
-            if (fog == null) return "[]";
-
-            JSONArray layers = fog.optJSONArray("layers");
-            if (layers == null) return "[]";
-
-            for (int i = 0; i < layers.length(); i++) {
-                JSONObject layer = layers.optJSONObject(i);
-                if (layer == null) continue;
-
-                if ("primary".equals(layer.optString("layerId"))) {
-                    JSONArray points = layer.optJSONArray("points");
-                    return points != null ? points.toString() : "[]";
-                }
-            }
-            return "[]";
-        } catch (Exception e) {
-            return "[]";
-        }
-    }
-
+    /**
+     * <p>Handles the scanned QR code, saving it to the shared layer</p>
+     * @param jsonData scanned data
+     */
     private void handleScannedMapData(String jsonData) {
         try {
             JSONArray arr = new JSONArray(jsonData);
@@ -180,13 +190,14 @@ public class SettingsActivity extends AppCompatActivity {
                     4.5
             );
 
+            // Load array into fog overlay and save
             tmp.loadAll(this);
             tmp.setSharedFromJsonArray(arr.toString());
             tmp.saveAll(this);
 
             Toast.makeText(this, "Shared map imported! Go back to the map to view.", Toast.LENGTH_LONG).show();
         } catch (Exception e) {
-            e.printStackTrace();
+            // throw if data is invalid or corrupted
             Toast.makeText(this, "Invalid or corrupted QR data.", Toast.LENGTH_LONG).show();
         }
     }
