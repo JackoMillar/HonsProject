@@ -34,30 +34,43 @@ import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay;
 
 public class MainActivity extends AppCompatActivity {
 
+    // -- UI Variables --
     private MapView map;
-    private MyLocationNewOverlay myLocationOverlay;
-    private IMapController mapController;
     private FloatingActionButton centerLocationButton;
     private FloatingActionButton settingButton;
 
-    // SINGLE fog overlay (primary + shared)
+    // -- Map Features --
+    private MyLocationNewOverlay myLocationOverlay;
+    private IMapController mapController;
+
+    // -- Fog Layer --
     private FogOverlay fogOverlay;
 
     private Bitmap userMarkerBitmap;
 
-    // GPS updates (so we can stop them onPause)
+    // -- GPS updates --
     private LocationManager locationManager;
     private LocationListener locationListener;
 
+    // -- Permissions --
     // Permission launcher
     private final ActivityResultLauncher<String[]> requestPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), isGranted -> {
                 if (Boolean.TRUE.equals(isGranted.get(android.Manifest.permission.ACCESS_FINE_LOCATION)) ||
                         Boolean.TRUE.equals(isGranted.get(android.Manifest.permission.ACCESS_COARSE_LOCATION))) {
-                    enableLocationTracking();
+                    enableLocationTracking(); // Enable location tracking of user
                 }
             });
 
+    // -- Lifecycle Method --
+
+    /**
+     * <p> Called when the activity is first created.</p>
+     * <p>Initialises and Creates Map & Location Overlay, User's Custom marker</p>
+     * <p>Creates and sets the Settings Button and the Center Location Button</p>
+     * <p>Checks Location Permission</p>
+     * @param savedInstanceState
+     */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -85,15 +98,11 @@ public class MainActivity extends AppCompatActivity {
         if (customMarker instanceof BitmapDrawable) {
             Bitmap raw = ((BitmapDrawable) customMarker).getBitmap();
 
-            // Pick your size here (e.g. 28dp / 32dp / 40dp)
+            // Scales User Marker
             userMarkerBitmap = scaleBitmapToDp(raw, 64f);
-
-            myLocationOverlay.setPersonIcon(userMarkerBitmap); // fallback (if you still use it)
         }
 
-        //map.getOverlays().add(myLocationOverlay);
-
-        // --- Fog overlay (PRIMARY + SHARED) ---
+        // --- Fog overlay ---
         fogOverlay = new FogOverlay(
                 100.0f, // primary radius
                 255,    // fog alpha (solid)
@@ -122,6 +131,7 @@ public class MainActivity extends AppCompatActivity {
                 Point screenPoint = new Point();
                 mapView.getProjection().toPixels(point, screenPoint);
 
+                // Image needs centered in the LocationOverlay
                 int offsetX = userMarkerBitmap.getWidth() / 2;
                 int offsetY = userMarkerBitmap.getHeight() / 2;
                 canvas.drawBitmap(userMarkerBitmap, screenPoint.x - offsetX, screenPoint.y - offsetY, null);
@@ -146,80 +156,11 @@ public class MainActivity extends AppCompatActivity {
         checkLocationPermission();
     }
 
-    private void centerMapOnCurrentLocation() {
-        myLocationOverlay.disableFollowLocation();
-        GeoPoint myLocation = myLocationOverlay.getMyLocation();
-        if (myLocation != null) {
-            mapController.animateTo(myLocation);
-            mapController.setZoom(16.0);
-        } else {
-            Toast.makeText(this, "Location not yet found. Please wait.", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void checkLocationPermission() {
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-                ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            enableLocationTracking();
-        } else {
-            requestPermissionLauncher.launch(new String[]{
-                    android.Manifest.permission.ACCESS_FINE_LOCATION,
-                    android.Manifest.permission.ACCESS_COARSE_LOCATION
-            });
-        }
-    }
-
-    private void enableLocationTracking() {
-        myLocationOverlay.disableFollowLocation();
-
-        // Start the foreground location service while the app is in the foreground (eligible state).
-        // This keeps tracking alive even if the Activity is later destroyed.
-        startFogService();
-
-        // Reveal fog at first fix
-        myLocationOverlay.runOnFirstFix(() -> runOnUiThread(() -> {
-            GeoPoint location = myLocationOverlay.getMyLocation();
-            if (location != null) {
-                mapController.animateTo(location);
-                mapController.setZoom(16.0);
-
-                // Reveal PRIMARY fog
-                fogOverlay.revealPrimary(location);
-                map.invalidate();
-            }
-        }));
-
-        // Location updates for fog
-        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-
-        locationListener = new LocationListener() {
-            @Override
-            public void onLocationChanged(Location location) {
-                runOnUiThread(() -> {
-                    GeoPoint newPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
-                    fogOverlay.revealPrimary(newPoint);
-                    map.invalidate();
-                });
-            }
-
-            @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
-            @Override public void onProviderEnabled(String provider) {}
-            @Override public void onProviderDisabled(String provider) {}
-        };
-
-        try {
-            locationManager.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER,
-                    2000,
-                    2,
-                    locationListener,
-                    Looper.getMainLooper()
-            );
-        } catch (SecurityException e) {
-            e.printStackTrace();
-        }
-    }
-
+    /**
+     * <p> Called when the activity is about to become visible.</p>
+     * <p> Starts Map and Checks Location Permission</p>
+     * <p> Pauses background tracking</p>
+     */
     @Override
     protected void onResume() {
         super.onResume();
@@ -241,6 +182,12 @@ public class MainActivity extends AppCompatActivity {
         sendFogServiceCommand(LocationFogService.ACTION_PAUSE);
     }
 
+    /**
+     * <p> Called when the activity is no longer visible.</p>
+     * <p> Saves fog to JSON DB</p>
+     * <p> Pauses Map and Stops GPS updates</p>
+     * <p> Resumes background tracking </p>
+     */
     @Override
     protected void onPause() {
         super.onPause();
@@ -267,6 +214,12 @@ public class MainActivity extends AppCompatActivity {
         sendFogServiceCommand(LocationFogService.ACTION_RESUME);
     }
 
+    /**
+     * <p> Called when the activity is about to be destroyed.</p>
+     * <p> Saves fog to JSON DB</p>
+     * <p> Detach Map and Stops GPS updates</p>
+     * <p> Resumes background tracking </p>
+     */
     @Override
     protected void onDestroy() {
         super.onDestroy();
@@ -279,18 +232,73 @@ public class MainActivity extends AppCompatActivity {
 
         if (map != null) map.onDetach();
 
-        // Don't restart the service here; it should already be running.
+        sendFogServiceCommand(LocationFogService.ACTION_RESUME);
     }
 
-    private int dpToPx(float dp) {
-        return Math.round(dp * getResources().getDisplayMetrics().density);
+    // -- Map Methods --
+    private void centerMapOnCurrentLocation() {
+        myLocationOverlay.disableFollowLocation();
+        GeoPoint myLocation = myLocationOverlay.getMyLocation();
+        if (myLocation != null) {
+            mapController.animateTo(myLocation);
+            mapController.setZoom(16.0);
+        } else {
+            Toast.makeText(this, "Location not yet found. Please wait.", Toast.LENGTH_SHORT).show();
+        }
     }
 
-    private Bitmap scaleBitmapToDp(Bitmap src, float dpSize) {
-        int px = dpToPx(dpSize);
-        return Bitmap.createScaledBitmap(src, px, px, true);
+    /**
+     * Enables location tracking of the user.
+     * Starts up "startFogService" for background tracking
+     */
+    private void enableLocationTracking() {
+        myLocationOverlay.disableFollowLocation();
+
+        // Start the location Service (tracks user location while they have the app minimised)
+        startFogService();
+
+        // Reveal fog on startup
+        myLocationOverlay.runOnFirstFix(() -> runOnUiThread(() -> {
+            GeoPoint location = myLocationOverlay.getMyLocation();
+            if (location != null) {
+                mapController.animateTo(location);
+                mapController.setZoom(16.0);
+
+                // Reveal PRIMARY fog
+                fogOverlay.revealPrimary(location);
+                map.invalidate();
+            }
+        }));
+
+        // Location updates for fog
+        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+
+        locationListener = new LocationListener() {
+            @Override
+            public void onLocationChanged(Location location) {
+                runOnUiThread(() -> {
+                    GeoPoint newPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
+                    fogOverlay.revealPrimary(newPoint);
+                    map.invalidate();
+                });
+            }
+
+        };
+
+        try {
+            locationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    2000,
+                    2,
+                    locationListener,
+                    Looper.getMainLooper()
+            );
+        } catch (SecurityException e) {
+            e.printStackTrace();
+        }
     }
 
+    // -- Fog Services --
     private void startFogService() {
         sendFogServiceCommand(null);
     }
@@ -306,6 +314,28 @@ public class MainActivity extends AppCompatActivity {
             }
         } catch (RuntimeException ignored) {
             // Defensive: avoid crashing if the system temporarily disallows FGS starts.
+        }
+    }
+
+    // -- Helper Methods --
+    private int dpToPx(float dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
+    }
+
+    private Bitmap scaleBitmapToDp(Bitmap src, float dpSize) {
+        int px = dpToPx(dpSize);
+        return Bitmap.createScaledBitmap(src, px, px, true);
+    }
+
+    private void checkLocationPermission() {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            enableLocationTracking();
+        } else {
+            requestPermissionLauncher.launch(new String[]{
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+            });
         }
     }
 
