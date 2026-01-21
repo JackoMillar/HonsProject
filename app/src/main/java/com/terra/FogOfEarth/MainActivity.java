@@ -62,13 +62,13 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-    // -- Lifecycle Method --
+    // -- Lifecycle Methods --
 
     /**
      * <p> Called when the activity is first created.</p>
      * <p>Initialises and Creates Map & Location Overlay, User's Custom marker</p>
      * <p>Creates and sets the Settings Button and the Center Location Button</p>
-     * <p>Checks Location Permission</p>
+     * <p>Checks Location Permission {@link #checkLocationPermission()}</p>
      * @param savedInstanceState
      */
     @Override
@@ -99,7 +99,7 @@ public class MainActivity extends AppCompatActivity {
             Bitmap raw = ((BitmapDrawable) customMarker).getBitmap();
 
             // Scales User Marker
-            userMarkerBitmap = scaleBitmapToDp(raw, 64f);
+            userMarkerBitmap = scaleBitmapToDp(raw, 48f);
         }
 
         // --- Fog overlay ---
@@ -158,7 +158,7 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * <p> Called when the activity is about to become visible.</p>
-     * <p> Starts Map and Checks Location Permission</p>
+     * <p> Starts Map and Checks Location Permission {@link #checkLocationPermission()}</p>
      * <p> Pauses background tracking</p>
      */
     @Override
@@ -186,7 +186,7 @@ public class MainActivity extends AppCompatActivity {
      * <p> Called when the activity is no longer visible.</p>
      * <p> Saves fog to JSON DB</p>
      * <p> Pauses Map and Stops GPS updates</p>
-     * <p> Resumes background tracking </p>
+     * <p> {@link #sendFogServiceCommand(String action)}Resumes background tracking </p>
      */
     @Override
     protected void onPause() {
@@ -236,6 +236,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // -- Map Methods --
+
+    /**
+     * <p> Centers the map on the user's current location.</p>
+     */
     private void centerMapOnCurrentLocation() {
         myLocationOverlay.disableFollowLocation();
         GeoPoint myLocation = myLocationOverlay.getMyLocation();
@@ -243,13 +247,16 @@ public class MainActivity extends AppCompatActivity {
             mapController.animateTo(myLocation);
             mapController.setZoom(16.0);
         } else {
+            // Tell user if location is not found
             Toast.makeText(this, "Location not yet found. Please wait.", Toast.LENGTH_SHORT).show();
         }
     }
 
     /**
-     * Enables location tracking of the user.
-     * Starts up "startFogService" for background tracking
+     * <p>Enables location tracking of the user.</p>
+     * <p>Starts up {@link #startFogService()} for background tracking</p>
+     * <p>{@link #fogOverlay} reveals fog on startup</p>
+     * <p>Starts {@link LocationListener} for GPS updates</p>
      */
     private void enableLocationTracking() {
         myLocationOverlay.disableFollowLocation();
@@ -285,48 +292,81 @@ public class MainActivity extends AppCompatActivity {
 
         };
 
+        // Requests location updates
         try {
             locationManager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
-                    2000,
-                    2,
-                    locationListener,
-                    Looper.getMainLooper()
+                    2000, // Request every 2 seconds minimum
+                    2,  // Request every 2 metres minimum
+                    locationListener, // The location listener
+                    Looper.getMainLooper() // Deliver callbacks on main thread
             );
         } catch (SecurityException e) {
+            // Throw if location permission is not granted
             e.printStackTrace();
         }
     }
 
     // -- Fog Services --
+
+    /**
+     * <p> Calls {@link #sendFogServiceCommand(String action)}</p>
+     */
     private void startFogService() {
         sendFogServiceCommand(null);
     }
 
+    /**
+     * Sends an optional action command to {@link LocationFogService} by starting the service.
+     *
+     * @param action Action string to set on the Intent, or {@code null} to start without an action.
+     */
     private void sendFogServiceCommand(String action) {
+        // Create an Intent to start the LocationFogService
         Intent i = new Intent(this, LocationFogService.class);
+
+        // attach action to intent if provided
         if (action != null) i.setAction(action);
+
+
         try {
+            // Android 8.0+ requires startForegroundService for services, older Versions require startService
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 startForegroundService(i);
             } else {
                 startService(i);
             }
         } catch (RuntimeException ignored) {
-            // Defensive: avoid crashing if the system temporarily disallows FGS starts.
+            // If the OS blocks a foreground service, don't crash the app.
         }
     }
 
     // -- Helper Methods --
+
+    /**
+     * Converts dp to px
+     * @param dp
+     * @return Converted dp
+     */
     private int dpToPx(float dp) {
         return Math.round(dp * getResources().getDisplayMetrics().density);
     }
 
+    /**
+     * Scales a bitmap to a given dp size
+     * @param src
+     * @param dpSize
+     * @return Scaled bitmap
+     */
     private Bitmap scaleBitmapToDp(Bitmap src, float dpSize) {
         int px = dpToPx(dpSize);
         return Bitmap.createScaledBitmap(src, px, px, true);
     }
 
+    /**
+     * If application has no location permission, request it.
+     * Otherwise, call {@link #enableLocationTracking()}
+     */
     private void checkLocationPermission() {
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                 ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
