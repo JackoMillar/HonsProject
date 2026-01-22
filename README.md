@@ -31,4 +31,8 @@ with all progress persisting locally.
 - **Android Studio**
 - **Github**
 
+## License
+This project is licensed under the MIT License — see the `LICENSE` file for details.
+
+
 Icons made by Pixel perfect from www.flaticon.com
