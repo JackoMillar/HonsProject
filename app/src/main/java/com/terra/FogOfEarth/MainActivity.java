@@ -8,7 +8,6 @@ import android.graphics.Canvas;
 import android.graphics.Point;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
@@ -36,8 +35,6 @@ public class MainActivity extends AppCompatActivity {
 
     // -- UI Variables --
     private MapView map;
-    private FloatingActionButton centerLocationButton;
-    private FloatingActionButton settingButton;
 
     // -- Map Features --
     private MyLocationNewOverlay myLocationOverlay;
@@ -69,7 +66,6 @@ public class MainActivity extends AppCompatActivity {
      * <p>Initialises and Creates Map & Location Overlay, User's Custom marker</p>
      * <p>Creates and sets the Settings Button and the Center Location Button</p>
      * <p>Checks Location Permission {@link #checkLocationPermission()}</p>
-     * @param savedInstanceState
      */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -99,7 +95,7 @@ public class MainActivity extends AppCompatActivity {
             Bitmap raw = ((BitmapDrawable) customMarker).getBitmap();
 
             // Scales User Marker
-            userMarkerBitmap = scaleBitmapToDp(raw, 48f);
+            userMarkerBitmap = scaleBitmapToDp(raw);
         }
 
         // --- Fog overlay ---
@@ -113,11 +109,11 @@ public class MainActivity extends AppCompatActivity {
         map.getOverlays().add(fogOverlay);
 
         // Center Location Button
-        centerLocationButton = findViewById(R.id.centerLocationButton);
+        FloatingActionButton centerLocationButton = findViewById(R.id.centerLocationButton);
         centerLocationButton.setOnClickListener(v -> centerMapOnCurrentLocation());
 
         // Setting Open Button
-        settingButton = findViewById(R.id.settingButton);
+        FloatingActionButton settingButton = findViewById(R.id.settingButton);
         settingButton.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, SettingsActivity.class)));
 
         // Draw the user icon centered
@@ -272,7 +268,7 @@ public class MainActivity extends AppCompatActivity {
                 mapController.setZoom(16.0);
 
                 // Reveal PRIMARY fog
-                fogOverlay.revealPrimary(location);
+                fogOverlay.addPrimary(location);
                 map.invalidate();
             }
         }));
@@ -280,17 +276,11 @@ public class MainActivity extends AppCompatActivity {
         // Location updates for fog
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
 
-        locationListener = new LocationListener() {
-            @Override
-            public void onLocationChanged(Location location) {
-                runOnUiThread(() -> {
-                    GeoPoint newPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
-                    fogOverlay.revealPrimary(newPoint);
-                    map.invalidate();
-                });
-            }
-
-        };
+        locationListener = location -> runOnUiThread(() -> {
+            GeoPoint newPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
+            fogOverlay.addPrimary(newPoint);
+            map.invalidate();
+        });
 
         // Requests location updates
         try {
@@ -345,21 +335,21 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * Converts dp to px
-     * @param dp
+     *
      * @return Converted dp
      */
-    private int dpToPx(float dp) {
-        return Math.round(dp * getResources().getDisplayMetrics().density);
+    private int dpToPx() {
+        return Math.round((float) 48.0 * getResources().getDisplayMetrics().density);
     }
 
     /**
      * Scales a bitmap to a given dp size
-     * @param src
-     * @param dpSize
+     *
+     * @param src Bitmap to scale
      * @return Scaled bitmap
      */
-    private Bitmap scaleBitmapToDp(Bitmap src, float dpSize) {
-        int px = dpToPx(dpSize);
+    private Bitmap scaleBitmapToDp(Bitmap src) {
+        int px = dpToPx();
         return Bitmap.createScaledBitmap(src, px, px, true);
     }
 

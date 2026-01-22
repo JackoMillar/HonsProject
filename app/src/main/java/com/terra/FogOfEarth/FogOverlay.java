@@ -8,7 +8,6 @@ import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
-import android.os.Build;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -21,7 +20,7 @@ import java.util.List;
 
 public class FogOverlay extends Overlay {
 
-    // Mask so overlapping shared circles DON'T stack / get clearer
+    // Mask so overlapping shared circles DON'T stack
     private Bitmap sharedMaskBitmap;
     private Canvas sharedMaskCanvas;
 
@@ -40,16 +39,27 @@ public class FogOverlay extends Overlay {
     private final float primaryRadiusMeters;
     private final double minDistanceMeters;
 
+    // ----- Constructor -----
+
+    /**
+     * <p>Initialises the fog overlay.</p>
+     *
+     * @param RadiusMeters Radius of the primary fog circle
+     * @param fogAlpha 255 = solid fog. 0 = no fog
+     * @param sharedClearAlpha 255 = solid fog. 0 = no fog
+     * @param minDistanceMeters Minimum distance between points / circles
+     */
     public FogOverlay(
-            float primaryRadiusMeters,
+            float RadiusMeters,
             int fogAlpha,              // 255 = solid fog
-            int sharedClearAlpha,      // e.g. 120–200 (fixed partial clear strength)
+            int sharedClearAlpha,      // e.g. 120–200
             double minDistanceMeters
     ) {
         super();
-        this.primaryRadiusMeters = primaryRadiusMeters;
+        this.primaryRadiusMeters = RadiusMeters;
         this.minDistanceMeters = minDistanceMeters;
 
+        // Set up Colour and Paint of the fog
         fogPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         fogPaint.setColor(0xFF4A5B6C); // fully opaque base colour
         fogPaint.setAlpha(fogAlpha);  // 255 = fully solid
@@ -70,22 +80,25 @@ public class FogOverlay extends Overlay {
         primaryEraserPaint.setAlpha(255);
     }
 
+    /**
+     * <p>Draws the fog onto the map.</p>
+     * <p>Build and Apply Shared Mask</p>
+     * <p>Apply Primary Mask</p>
+     * @param canvas Canvas to draw onto
+     * @param mapView MapView to draw onto
+     * @param shadow If true, don't draw
+     */
     @Override
     public void draw(Canvas canvas, MapView mapView, boolean shadow) {
         if (shadow) return;
 
         int layerId;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            layerId = canvas.saveLayerAlpha(0, 0, canvas.getWidth(), canvas.getHeight(), 255);
-        } else {
-            //noinspection deprecation
-            layerId = canvas.saveLayer(0, 0, canvas.getWidth(), canvas.getHeight(), null, Canvas.ALL_SAVE_FLAG);
-        }
+        layerId = canvas.saveLayerAlpha(0, 0, canvas.getWidth(), canvas.getHeight(), 255);
 
-        // 1) Draw solid fog onto an offscreen layer
+        // Draw solid fog onto an offscreen layer
         canvas.drawRect(0, 0, canvas.getWidth(), canvas.getHeight(), fogPaint);
 
-        // 2) Build a SHARED mask (union of circles) then apply ONCE so overlaps don't stack
+        // Build a SHARED mask (union of circles) then apply ONCE so overlaps don't stack
         int w = canvas.getWidth();
         int h = canvas.getHeight();
         if (sharedMaskBitmap == null || sharedMaskBitmap.getWidth() != w || sharedMaskBitmap.getHeight() != h) {
@@ -107,7 +120,7 @@ public class FogOverlay extends Overlay {
         // Apply mask once at fixed alpha
         canvas.drawBitmap(sharedMaskBitmap, 0, 0, sharedApplyPaint);
 
-        // 3) Primary full clears (on top)
+        //  Draw PrimaryPoints onto map
         for (GeoPoint p : primaryPoints) {
             mapView.getProjection().toPixels(p, sp);
             float rPx = metersToPixels(mapView, p, primaryRadiusMeters);
@@ -117,24 +130,20 @@ public class FogOverlay extends Overlay {
         canvas.restoreToCount(layerId);
     }
 
-    private float metersToPixels(MapView mapView, GeoPoint center, float meters) {
-        GeoPoint north = new GeoPoint(center.getLatitude() + meters / 111320f, center.getLongitude());
-        Point c = new Point();
-        Point n = new Point();
-        mapView.getProjection().toPixels(center, c);
-        mapView.getProjection().toPixels(north, n);
-        return (float) Math.hypot(n.x - c.x, n.y - c.y);
-    }
-
-    // ----- Primary reveal (your movement) -----
-    public void revealPrimary(GeoPoint point) {
+    /** Add point to {@link #primaryPoints}
+     * @param point Point to reveal at
+     */
+    public void addPrimary(GeoPoint point) {
+        // if point is too close to another point, don't add
         for (GeoPoint existing : primaryPoints) {
             if (existing.distanceToAsDouble(point) < minDistanceMeters) return;
         }
         primaryPoints.add(point);
     }
 
-    // ----- Shared import (friends) -----
+    /** Add points to {@link #sharedPoints}
+     * @param jsonArrayString JSON Array of points to add to {@link #sharedPoints}
+     */
     public void setSharedFromJsonArray(String jsonArrayString) {
         try {
             JSONArray arr = new JSONArray(jsonArrayString);
@@ -146,7 +155,10 @@ public class FogOverlay extends Overlay {
         } catch (Exception ignored) {}
     }
 
-    // ----- JSON DB load/save for BOTH layers -----
+    /**
+     * Load all fog layers from storage into designated {@link #primaryPoints} and {@link #sharedPoints}
+     * @param context Context to load from
+     */
     public void loadAll(Context context) {
         primaryPoints.clear();
         sharedPoints.clear();
@@ -154,12 +166,18 @@ public class FogOverlay extends Overlay {
         loadLayerInto(context, "shared", sharedPoints);
     }
 
+    /**
+     * Save all fog layers to storage from {@link #primaryPoints} and {@link #sharedPoints}
+     */
     public void saveAll(Context context) {
         saveLayerFrom(context, "primary", primaryPoints, primaryRadiusMeters);
         saveLayerFrom(context, "shared", sharedPoints, primaryRadiusMeters);
     }
 
-    // Export primary points for QR
+    /**
+     * Exports the primary points as a JSON Array
+     * @return JSON Array of points as a string
+     */
     public String exportPrimaryAsJsonArray() {
         try {
             JSONArray points = new JSONArray();
@@ -175,48 +193,73 @@ public class FogOverlay extends Overlay {
         }
     }
 
-    // ---------- DB helpers ----------
+    /**
+     * Load fog layers from storage into a list
+     * @param context Context to load from
+     * @param layerId Layer to load
+     * @param out List to load into
+     */
     private static void loadLayerInto(Context context, String layerId, List<GeoPoint> out) {
         try {
+            // Load fog layers from storage
             JSONObject root = JsonDb.load(context);
             JSONObject fog = root.optJSONObject("fog");
             if (fog == null) return;
 
+            // Load points from fog layers
             JSONArray layers = fog.optJSONArray("layers");
             if (layers == null) return;
 
+            // Loop through all layers until found
             for (int i = 0; i < layers.length(); i++) {
+                // Get layer object
                 JSONObject layer = layers.optJSONObject(i);
                 if (layer == null) continue;
                 if (!layerId.equals(layer.optString("layerId"))) continue;
 
+                // Get points from layer
                 JSONArray points = layer.optJSONArray("points");
                 if (points == null) return;
 
+                out.clear();
+                // Add points to out list
                 for (int j = 0; j < points.length(); j++) {
                     JSONObject obj = points.optJSONObject(j);
                     if (obj == null) continue;
                     out.add(new GeoPoint(obj.getDouble("lat"), obj.getDouble("lon")));
                 }
+                // Found layer, return
                 return;
             }
         } catch (Exception ignored) {}
     }
 
+    /**
+     * Save fog layers to storage from a list
+     * @param context Context to save to
+     * @param layerId Layer to save
+     * @param pointsList List of points to save
+     * @param radiusMeters Radius of the points
+     */
     private static void saveLayerFrom(Context context, String layerId, List<GeoPoint> pointsList, float radiusMeters) {
         try {
+            // Load fog layers from storage
             JSONObject root = JsonDb.load(context);
             root.put("schemaVersion", 1);
 
+            // Get fog object
             JSONObject fog = root.optJSONObject("fog");
             if (fog == null) fog = new JSONObject();
 
+            // Get layers array
             JSONArray layers = fog.optJSONArray("layers");
             if (layers == null) layers = new JSONArray();
 
+            // Find layer object and update
             JSONObject layerObj = null;
             int idx = -1;
 
+            // Loop through all layers until found
             for (int i = 0; i < layers.length(); i++) {
                 JSONObject lo = layers.optJSONObject(i);
                 if (lo != null && layerId.equals(lo.optString("layerId"))) {
@@ -227,6 +270,7 @@ public class FogOverlay extends Overlay {
             }
             if (layerObj == null) layerObj = new JSONObject();
 
+            // Create new points array
             JSONArray arr = new JSONArray();
             for (GeoPoint p : pointsList) {
                 JSONObject o = new JSONObject();
@@ -235,18 +279,41 @@ public class FogOverlay extends Overlay {
                 arr.put(o);
             }
 
+            // Update layer object
             layerObj.put("layerId", layerId);
             layerObj.put("revealRadiusMeters", radiusMeters);
             layerObj.put("minDistanceMeters", 4.5);
             layerObj.put("points", arr);
 
+            // Update layers array
             if (idx >= 0) layers.put(idx, layerObj);
             else layers.put(layerObj);
 
+            // Update fog object
             fog.put("layers", layers);
             root.put("fog", fog);
 
+            // Save to storage
             JsonDb.save(context, root);
         } catch (Exception ignored) {}
+    }
+
+    // -- Method Helpers --
+
+    /**
+     * <p>Converts meters to pixels</p>
+     *
+     * @param mapView MapView to use
+     * @param center Center point to use
+     * @param meters Meters to convert
+     * @return Converted pixels
+     */
+    private float metersToPixels(MapView mapView, GeoPoint center, float meters) {
+        GeoPoint north = new GeoPoint(center.getLatitude() + meters / 111320f, center.getLongitude());
+        Point c = new Point();
+        Point n = new Point();
+        mapView.getProjection().toPixels(center, c);
+        mapView.getProjection().toPixels(north, n);
+        return (float) Math.hypot(n.x - c.x, n.y - c.y);
     }
 }
