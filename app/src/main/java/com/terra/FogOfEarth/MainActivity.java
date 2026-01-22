@@ -8,7 +8,6 @@ import android.graphics.Canvas;
 import android.graphics.Point;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
@@ -36,8 +35,6 @@ public class MainActivity extends AppCompatActivity {
 
     // -- UI Variables --
     private MapView map;
-    private FloatingActionButton centerLocationButton;
-    private FloatingActionButton settingButton;
 
     // -- Map Features --
     private MyLocationNewOverlay myLocationOverlay;
@@ -62,14 +59,13 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-    // -- Lifecycle Method --
+    // -- Lifecycle Methods --
 
     /**
-     * <p> Called when the activity is first created.</p>
+     * <p>Called when the activity is first created.</p>
      * <p>Initialises and Creates Map & Location Overlay, User's Custom marker</p>
      * <p>Creates and sets the Settings Button and the Center Location Button</p>
-     * <p>Checks Location Permission</p>
-     * @param savedInstanceState
+     * <p>Checks Location Permission {@link #checkLocationPermission()}</p>
      */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -99,7 +95,7 @@ public class MainActivity extends AppCompatActivity {
             Bitmap raw = ((BitmapDrawable) customMarker).getBitmap();
 
             // Scales User Marker
-            userMarkerBitmap = scaleBitmapToDp(raw, 64f);
+            userMarkerBitmap = scaleBitmapToDp(raw);
         }
 
         // --- Fog overlay ---
@@ -113,11 +109,11 @@ public class MainActivity extends AppCompatActivity {
         map.getOverlays().add(fogOverlay);
 
         // Center Location Button
-        centerLocationButton = findViewById(R.id.centerLocationButton);
+        FloatingActionButton centerLocationButton = findViewById(R.id.centerLocationButton);
         centerLocationButton.setOnClickListener(v -> centerMapOnCurrentLocation());
 
         // Setting Open Button
-        settingButton = findViewById(R.id.settingButton);
+        FloatingActionButton settingButton = findViewById(R.id.settingButton);
         settingButton.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, SettingsActivity.class)));
 
         // Draw the user icon centered
@@ -158,7 +154,7 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * <p> Called when the activity is about to become visible.</p>
-     * <p> Starts Map and Checks Location Permission</p>
+     * <p> Starts Map and Checks Location Permission {@link #checkLocationPermission()}</p>
      * <p> Pauses background tracking</p>
      */
     @Override
@@ -186,7 +182,7 @@ public class MainActivity extends AppCompatActivity {
      * <p> Called when the activity is no longer visible.</p>
      * <p> Saves fog to JSON DB</p>
      * <p> Pauses Map and Stops GPS updates</p>
-     * <p> Resumes background tracking </p>
+     * <p> {@link #sendFogServiceCommand(String action)}Resumes background tracking </p>
      */
     @Override
     protected void onPause() {
@@ -236,6 +232,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // -- Map Methods --
+
+    /**
+     * <p> Centers the map on the user's current location.</p>
+     */
     private void centerMapOnCurrentLocation() {
         myLocationOverlay.disableFollowLocation();
         GeoPoint myLocation = myLocationOverlay.getMyLocation();
@@ -243,13 +243,16 @@ public class MainActivity extends AppCompatActivity {
             mapController.animateTo(myLocation);
             mapController.setZoom(16.0);
         } else {
+            // Tell user if location is not found
             Toast.makeText(this, "Location not yet found. Please wait.", Toast.LENGTH_SHORT).show();
         }
     }
 
     /**
-     * Enables location tracking of the user.
-     * Starts up "startFogService" for background tracking
+     * <p>Enables location tracking of the user.</p>
+     * <p>Starts up {@link #startFogService()} for background tracking</p>
+     * <p>{@link #fogOverlay} reveals fog on startup</p>
+     * <p>Starts {@link LocationListener} for GPS updates</p>
      */
     private void enableLocationTracking() {
         myLocationOverlay.disableFollowLocation();
@@ -265,7 +268,7 @@ public class MainActivity extends AppCompatActivity {
                 mapController.setZoom(16.0);
 
                 // Reveal PRIMARY fog
-                fogOverlay.revealPrimary(location);
+                fogOverlay.addPrimary(location);
                 map.invalidate();
             }
         }));
@@ -273,60 +276,87 @@ public class MainActivity extends AppCompatActivity {
         // Location updates for fog
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
 
-        locationListener = new LocationListener() {
-            @Override
-            public void onLocationChanged(Location location) {
-                runOnUiThread(() -> {
-                    GeoPoint newPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
-                    fogOverlay.revealPrimary(newPoint);
-                    map.invalidate();
-                });
-            }
+        locationListener = location -> runOnUiThread(() -> {
+            GeoPoint newPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
+            fogOverlay.addPrimary(newPoint);
+            map.invalidate();
+        });
 
-        };
-
+        // Requests location updates
         try {
             locationManager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
-                    2000,
-                    2,
-                    locationListener,
-                    Looper.getMainLooper()
+                    2000, // Request every 2 seconds minimum
+                    2,  // Request every 2 metres minimum
+                    locationListener, // The location listener
+                    Looper.getMainLooper() // Deliver callbacks on main thread
             );
         } catch (SecurityException e) {
+            // Throw if location permission is not granted
             e.printStackTrace();
         }
     }
 
     // -- Fog Services --
+
+    /**
+     * <p> Calls {@link #sendFogServiceCommand(String action)}</p>
+     */
     private void startFogService() {
         sendFogServiceCommand(null);
     }
 
+    /**
+     * Sends an optional action command to {@link LocationFogService} by starting the service.
+     *
+     * @param action Action string to set on the Intent, or {@code null} to start without an action.
+     */
     private void sendFogServiceCommand(String action) {
+        // Create an Intent to start the LocationFogService
         Intent i = new Intent(this, LocationFogService.class);
+
+        // attach action to intent if provided
         if (action != null) i.setAction(action);
+
+
         try {
+            // Android 8.0+ requires startForegroundService for services, older Versions require startService
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 startForegroundService(i);
             } else {
                 startService(i);
             }
         } catch (RuntimeException ignored) {
-            // Defensive: avoid crashing if the system temporarily disallows FGS starts.
+            // If the OS blocks a foreground service, don't crash the app.
         }
     }
 
     // -- Helper Methods --
-    private int dpToPx(float dp) {
-        return Math.round(dp * getResources().getDisplayMetrics().density);
+
+    /**
+     * Converts dp to px
+     *
+     * @return Converted dp
+     */
+    private int dpToPx() {
+        return Math.round((float) 48.0 * getResources().getDisplayMetrics().density);
     }
 
-    private Bitmap scaleBitmapToDp(Bitmap src, float dpSize) {
-        int px = dpToPx(dpSize);
+    /**
+     * Scales a bitmap to a given dp size
+     *
+     * @param src Bitmap to scale
+     * @return Scaled bitmap
+     */
+    private Bitmap scaleBitmapToDp(Bitmap src) {
+        int px = dpToPx();
         return Bitmap.createScaledBitmap(src, px, px, true);
     }
 
+    /**
+     * If application has no location permission, request it.
+     * Otherwise, call {@link #enableLocationTracking()}
+     */
     private void checkLocationPermission() {
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                 ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {

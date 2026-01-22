@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">FogOfEarth</string>
+    <string name="QRcontentString">Return</string>
+    <string name="scan_shared_map">Scan shared map</string>
+    <string name="clear_cache">Clear Cache</string>
+    <string name="share_map">Share Map</string>
+    <string name="qr_code">QR Code</string>
 </resources>
