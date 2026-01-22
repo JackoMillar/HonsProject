@@ -38,19 +38,16 @@ public class FogOverlay extends Overlay {
     private final List<GeoPoint> sharedPoints = new ArrayList<>();
 
     private final float primaryRadiusMeters;
-    private final float sharedRadiusMeters;
     private final double minDistanceMeters;
 
     public FogOverlay(
             float primaryRadiusMeters,
-            float sharedRadiusMeters,
             int fogAlpha,              // 255 = solid fog
             int sharedClearAlpha,      // e.g. 120–200 (fixed partial clear strength)
             double minDistanceMeters
     ) {
         super();
         this.primaryRadiusMeters = primaryRadiusMeters;
-        this.sharedRadiusMeters = sharedRadiusMeters;
         this.minDistanceMeters = minDistanceMeters;
 
         fogPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -103,7 +100,7 @@ public class FogOverlay extends Overlay {
         Point sp = new Point();
         for (GeoPoint p : sharedPoints) {
             mapView.getProjection().toPixels(p, sp);
-            float rPx = metersToPixels(mapView, p, sharedRadiusMeters);
+            float rPx = metersToPixels(mapView, p, primaryRadiusMeters);
             sharedMaskCanvas.drawCircle(sp.x, sp.y, rPx, sharedMaskPaint);
         }
 
@@ -159,7 +156,7 @@ public class FogOverlay extends Overlay {
 
     public void saveAll(Context context) {
         saveLayerFrom(context, "primary", primaryPoints, primaryRadiusMeters);
-        saveLayerFrom(context, "shared", sharedPoints, sharedRadiusMeters);
+        saveLayerFrom(context, "shared", sharedPoints, primaryRadiusMeters);
     }
 
     // Export primary points for QR
