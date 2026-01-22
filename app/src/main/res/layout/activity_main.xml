@@ -17,7 +17,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         />
 
-    <!-- Compass Button -->
+
     <!-- Compass Button -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/centerLocationButton"
@@ -53,6 +53,5 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         tools:ignore="ContentDescription,SpeakableTextPresentCheck" />
-
 
 </androidx.constraintlayout.widget.ConstraintLayout>
