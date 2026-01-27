@@ -134,7 +134,7 @@ public class FogOverlay extends Overlay {
      * @param point Point to reveal at
      */
     public void addPrimary(GeoPoint point) {
-        // if point is too close to another point, don't add
+        // if point is too close to another point, do not add
         for (GeoPoint existing : primaryPoints) {
             if (existing.distanceToAsDouble(point) < minDistanceMeters) return;
         }
