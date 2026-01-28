@@ -100,7 +100,7 @@ public class MainActivity extends AppCompatActivity {
 
         // --- Fog overlay ---
         fogOverlay = new FogOverlay(
-                100.0f, // primary radius
+                50.0f, // primary radius
                 255,    // fog alpha (solid)
                 170,    // shared clear alpha (tweak 120-200)
                 4.5     // min distance
