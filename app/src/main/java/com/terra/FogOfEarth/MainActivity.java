@@ -24,6 +24,7 @@ import androidx.core.content.res.ResourcesCompat;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.mapbox.android.gestures.BuildConfig;
 
 import org.osmdroid.api.IMapController;
 import org.osmdroid.config.Configuration;
@@ -64,6 +65,20 @@ public class MainActivity extends AppCompatActivity {
                     enableLocationTracking(); // Enable location tracking of user
                 }
             });
+
+    // -- Logging --
+    private int locationUpdateCount = 0;
+    // Count when location updates are accepted
+    private int acceptedLocationCount = 0;
+    // Count when location updates are rejected
+    private int rejectedLocationCount = 0;
+    // Specific reasons for rejection
+    private int rejectStale = 0;
+    private int rejectPoorAccuracy = 0;
+    private int rejectJump = 0;
+
+    private long sessionStartTs = 0L;
+
 
     // -- Lifecycle Methods --
 
@@ -166,6 +181,12 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        // Logging
+        StudyLogger.logEvent(this, "session_start", null);
+        sessionStartTs = System.currentTimeMillis();
+        locationUpdateCount = acceptedLocationCount = rejectedLocationCount = 0;
+        rejectStale = rejectPoorAccuracy = rejectJump = 0;
+
         if (map != null) {
             Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this));
             map.onResume();
@@ -194,27 +215,65 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
 
-        // Save fog to JSON DB
+        // --- Study logging: session summary ---
+        try {
+            long endTs = System.currentTimeMillis();
+            long durationMs = (sessionStartTs > 0) ? (endTs - sessionStartTs) : 0L;
+
+            // If you later add real area math, replace these two:
+            double revealDelta = 0.0;         // e.g. delta revealed since last session
+            double totalUncoveredPct = 0.0;   // e.g. total uncovered % (high precision)
+
+            org.json.JSONObject summary = new org.json.JSONObject();
+            summary.put("sessionId", java.util.UUID.randomUUID().toString());
+            summary.put("startTs", sessionStartTs);
+            summary.put("endTs", endTs);
+            summary.put("durationMs", durationMs);
+
+            summary.put("locationUpdateCount", locationUpdateCount);
+            summary.put("acceptedLocationCount", acceptedLocationCount);
+            summary.put("rejectedLocationCount", rejectedLocationCount);
+
+            summary.put("rejectStale", rejectStale);
+            summary.put("rejectPoorAccuracy", rejectPoorAccuracy);
+            summary.put("rejectJump", rejectJump);
+
+            summary.put("revealDelta", revealDelta);
+            summary.put("totalUncoveredPct", totalUncoveredPct);
+
+            summary.put("appVersion", BuildConfig.VERSION_NAME);
+
+            StudyLogger.logSessionSummary(this, summary);
+            StudyLogger.logEvent(this, "session_end", null);
+        } catch (Exception ignored) {}
+
+        // --- Your existing behavior ---
+        // Save fog to DB
         if (fogOverlay != null) fogOverlay.saveAll(this);
 
         // Stop GPS updates
         if (locationManager != null && locationListener != null) {
-            locationManager.removeUpdates(locationListener);
+            try {
+                locationManager.removeUpdates(locationListener);
+            } catch (SecurityException ignored) {}
         }
 
+        // Pause map
         if (map != null) {
             Configuration.getInstance().save(this, PreferenceManager.getDefaultSharedPreferences(this));
             map.onPause();
         }
 
+        // Disable overlay tracking
         if (myLocationOverlay != null) {
             myLocationOverlay.disableMyLocation();
             myLocationOverlay.disableFollowLocation();
         }
 
-        // App is going into the background; resume background tracking.
+        // App is going into background; resume background tracking
         sendFogServiceCommand(LocationFogService.ACTION_RESUME);
     }
+
 
     /**
      * <p> Called when the activity is about to be destroyed.</p>
@@ -281,7 +340,8 @@ public class MainActivity extends AppCompatActivity {
 
         // Location updates for fog
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-
+        // Update logging
+        locationUpdateCount++;
         locationListener = location -> runOnUiThread(() -> {
             if (!shouldAcceptLocation(location)) return;
             GeoPoint newPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
@@ -308,27 +368,39 @@ public class MainActivity extends AppCompatActivity {
      * Filters GPS jumps (common indoors) so you don't unveil fog from bad fixes.
      */
     private boolean shouldAcceptLocation(Location loc) {
-        if (loc == null) return false;
+        if (loc == null) {
+            rejectedLocationCount++;
+            return false;
+        }
 
-        // Reject stale fixes (>10s old)
         long ageMs = System.currentTimeMillis() - loc.getTime();
-        if (ageMs > 10_000) return false;
+        if (ageMs > 10_000) {
+            rejectedLocationCount++;
+            rejectStale++;
+            return false;
+        }
 
-        // Reject poor accuracy
-        if (loc.hasAccuracy() && loc.getAccuracy() > 25f) return false;
+        if (loc.hasAccuracy() && loc.getAccuracy() > 25f) {
+            rejectedLocationCount++;
+            rejectPoorAccuracy++;
+            return false;
+        }
 
-        // Reject implausible jumps vs last accepted
         long nowElapsed = SystemClock.elapsedRealtime();
         if (lastAccepted != null) {
             float dist = loc.distanceTo(lastAccepted);
             float dt = (nowElapsed - lastAcceptedElapsedMs) / 1000f;
             if (dt > 0f) {
-                float speed = dist / dt; // m/s
-                // walking app: reject very fast jumps
-                if (speed > 8f && dist > 30f) return false;
+                float speed = dist / dt;
+                if (speed > 8f && dist > 30f) {
+                    rejectedLocationCount++;
+                    rejectJump++;
+                    return false;
+                }
             }
         }
 
+        acceptedLocationCount++;
         lastAccepted = loc;
         lastAcceptedElapsedMs = nowElapsed;
         return true;
