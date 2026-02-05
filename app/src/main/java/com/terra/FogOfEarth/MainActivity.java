@@ -8,10 +8,12 @@ import android.graphics.Canvas;
 import android.graphics.Point;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -48,6 +50,10 @@ public class MainActivity extends AppCompatActivity {
     // -- GPS updates --
     private LocationManager locationManager;
     private LocationListener locationListener;
+
+    // Location sanity filter state
+    private Location lastAccepted = null;
+    private long lastAcceptedElapsedMs = 0L;
 
     // -- Permissions --
     // Permission launcher
@@ -100,7 +106,7 @@ public class MainActivity extends AppCompatActivity {
 
         // --- Fog overlay ---
         fogOverlay = new FogOverlay(
-                100.0f, // primary radius
+                50.0f, // primary radius
                 255,    // fog alpha (solid)
                 170,    // shared clear alpha (tweak 120-200)
                 4.5     // min distance
@@ -277,6 +283,7 @@ public class MainActivity extends AppCompatActivity {
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
 
         locationListener = location -> runOnUiThread(() -> {
+            if (!shouldAcceptLocation(location)) return;
             GeoPoint newPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
             fogOverlay.addPrimary(newPoint);
             map.invalidate();
@@ -295,6 +302,36 @@ public class MainActivity extends AppCompatActivity {
             // Throw if location permission is not granted
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Filters GPS jumps (common indoors) so you don't unveil fog from bad fixes.
+     */
+    private boolean shouldAcceptLocation(Location loc) {
+        if (loc == null) return false;
+
+        // Reject stale fixes (>10s old)
+        long ageMs = System.currentTimeMillis() - loc.getTime();
+        if (ageMs > 10_000) return false;
+
+        // Reject poor accuracy
+        if (loc.hasAccuracy() && loc.getAccuracy() > 25f) return false;
+
+        // Reject implausible jumps vs last accepted
+        long nowElapsed = SystemClock.elapsedRealtime();
+        if (lastAccepted != null) {
+            float dist = loc.distanceTo(lastAccepted);
+            float dt = (nowElapsed - lastAcceptedElapsedMs) / 1000f;
+            if (dt > 0f) {
+                float speed = dist / dt; // m/s
+                // walking app: reject very fast jumps
+                if (speed > 8f && dist > 30f) return false;
+            }
+        }
+
+        lastAccepted = loc;
+        lastAcceptedElapsedMs = nowElapsed;
+        return true;
     }
 
     // -- Fog Services --
@@ -317,7 +354,6 @@ public class MainActivity extends AppCompatActivity {
 
         // attach action to intent if provided
         if (action != null) i.setAction(action);
-
 
         try {
             // Android 8.0+ requires startForegroundService for services, older Versions require startService

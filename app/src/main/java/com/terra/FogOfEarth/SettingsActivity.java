@@ -18,6 +18,7 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.google.android.material.button.MaterialButton;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.WriterException;
 import com.google.zxing.common.BitMatrix;
@@ -27,11 +28,6 @@ import com.journeyapps.barcodescanner.ScanOptions;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
-
-
-
-import com.google.android.material.button.MaterialButton;
-
 
 public class SettingsActivity extends AppCompatActivity {
 
@@ -47,6 +43,7 @@ public class SettingsActivity extends AppCompatActivity {
                     Toast.makeText(this, "No QR code detected.", Toast.LENGTH_SHORT).show();
                 }
             });
+
     // Camera permission launcher
     private final ActivityResultLauncher<String> cameraPermLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
@@ -56,6 +53,15 @@ public class SettingsActivity extends AppCompatActivity {
                     Toast.makeText(this, "Camera permission required to scan QR codes.", Toast.LENGTH_LONG).show();
                 }
             });
+
+    // Multipart QR state (FOG2)
+    private String[] qrParts = null;
+    private int qrPartIndex = 0;
+
+    // Import multipart collector (in-memory for this session)
+    private String importTransferId = null;
+    private String[] importParts = null;
+    private int importTotal = 0;
 
     /**
      * <p>Called when the activity is first created.</p>
@@ -89,58 +95,51 @@ public class SettingsActivity extends AppCompatActivity {
         returnButton.setOnClickListener(v -> finish());
 
         // Generate QR from saved PRIMARY layer points
-        // Load existing db -> set shared -> save back
         FogOverlay tmp = new FogOverlay(100.0f, 255, 170, 4.5);
         tmp.loadAll(this);
-        String content = tmp.exportPrimaryAsJsonArray();
 
-        // If no data, show a tiny message JSON
-        if (content == null || content.isEmpty() || content.equals("[]")) {
-            content = "{\"message\":\"No progress saved yet\"}";
-        }
+        String encoded = tmp.exportPrimaryAsEncodedPolyline();
+        if (encoded == null) encoded = "";
 
         // QR image size in pixels
         int qrSize = 900;
 
-        // writer to convert JSON into a QR code
-        QRCodeWriter writer = new QRCodeWriter();
-        try {
-            // Encode content as a QR code matrix
-            BitMatrix bitMatrix = writer.encode(content, BarcodeFormat.QR_CODE, qrSize, qrSize);
+        // Build QR payload(s)
+        final int MAX_PART_LEN = 1200;
+        String transferId = String.valueOf(System.currentTimeMillis());
 
-            // Create a bitmap to draw the QR code into
-            int width = bitMatrix.getWidth();
-            int height = bitMatrix.getHeight();
-            Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565);
-
-            // Convert the BitMatrix into black and white pixels in the bitmap
-            for (int x = 0; x < width; x++) {
-                for (int y = 0; y < height; y++) {
-                    bmp.setPixel(x, y, bitMatrix.get(x, y) ? Color.BLACK : Color.WHITE);
-                }
+        if (encoded.isEmpty()) {
+            qrParts = new String[] { "FOG2|EMPTY|1/1|" };
+        } else {
+            int total = (int) Math.ceil((double) encoded.length() / MAX_PART_LEN);
+            if (total < 1) total = 1;
+            qrParts = new String[total];
+            for (int i = 0; i < total; i++) {
+                int start = i * MAX_PART_LEN;
+                int end = Math.min(encoded.length(), (i + 1) * MAX_PART_LEN);
+                String chunk = encoded.substring(start, end);
+                qrParts[i] = "FOG2|" + transferId + "|" + (i + 1) + "/" + total + "|" + chunk;
             }
-
-            // Display the generated QR bitmap in the ImageView
-            ((ImageView) findViewById(R.id.imgQr)).setImageBitmap(bmp);
-
-        } catch (IllegalArgumentException e) {
-            // Throw if content cannot be encoded
-            Toast.makeText(this, "Shared data too large for a QR code.", Toast.LENGTH_LONG).show();
-        } catch (WriterException e) {
-            // Throw if writer fails to generate QR code
-            Toast.makeText(this, "Failed to generate QR.", Toast.LENGTH_LONG).show();
         }
+
+        ImageView qrView = findViewById(R.id.imgQr);
+        renderQrPart(qrView, qrParts[0], qrSize);
+
+        // Tap QR to cycle parts if multiple
+        qrView.setOnClickListener(v -> {
+            if (qrParts == null || qrParts.length <= 1) return;
+            qrPartIndex = (qrPartIndex + 1) % qrParts.length;
+            renderQrPart(qrView, qrParts[qrPartIndex], qrSize);
+            Toast.makeText(this,
+                    "QR part " + (qrPartIndex + 1) + " / " + qrParts.length,
+                    Toast.LENGTH_SHORT).show();
+        });
 
         // Button: clear cached / saved fog data
         MaterialButton clearCacheButton = findViewById(R.id.clearCacheButton);
         clearCacheButton.setOnClickListener(v -> {
-            // Clear stored JSON DB/cache data
             JsonDb.clear(this);
-
-            // Reset the QR Image to a placeholder since progress is now wiped
             ((ImageView) findViewById(R.id.imgQr)).setImageResource(R.drawable.placeholder_qr);
-
-            // Inform user that cache is cleared
             Toast.makeText(this, "Cache cleared.", Toast.LENGTH_SHORT).show();
         });
     }
@@ -173,6 +172,63 @@ public class SettingsActivity extends AppCompatActivity {
      */
     private void handleScannedMapData(String jsonData) {
         try {
+            // New format: FOG2|transferId|part/total|chunk
+            if (jsonData != null && jsonData.startsWith("FOG2|")) {
+                if (jsonData.equals("FOG2|EMPTY|1/1|")) {
+                    Toast.makeText(this, "That QR contains no progress.", Toast.LENGTH_LONG).show();
+                    return;
+                }
+
+                String[] parts = jsonData.split("\\|", 4);
+                if (parts.length < 4) throw new IllegalArgumentException("Bad FOG2 payload");
+
+                String tId = parts[1];
+                String frac = parts[2];
+                String chunk = parts[3];
+
+                String[] ft = frac.split("/");
+                int partNum = Integer.parseInt(ft[0]);
+                int total = Integer.parseInt(ft[1]);
+                if (partNum < 1 || partNum > total) throw new IllegalArgumentException("Bad part index");
+
+                // (Re)initialise collector if new transfer
+                if (importTransferId == null || !importTransferId.equals(tId)) {
+                    importTransferId = tId;
+                    importTotal = total;
+                    importParts = new String[total];
+                }
+
+                if (importParts == null || importParts.length != total) {
+                    importTotal = total;
+                    importParts = new String[total];
+                }
+
+                importParts[partNum - 1] = chunk;
+
+                int have = 0;
+                for (String s : importParts) if (s != null) have++;
+
+                if (have < total) {
+                    Toast.makeText(this,
+                            "Scanned part " + partNum + " / " + total + " (" + have + " collected)",
+                            Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                StringBuilder sb = new StringBuilder();
+                for (String s : importParts) sb.append(s);
+                String encoded = sb.toString();
+
+                FogOverlay tmp = new FogOverlay(100.0f, 255, 170, 4.5);
+                tmp.loadAll(this);
+                tmp.setSharedFromEncodedPolyline(encoded);
+                tmp.saveAll(this);
+
+                Toast.makeText(this, "Shared map imported! Go back to the map to view.", Toast.LENGTH_LONG).show();
+                return;
+            }
+
+            // Legacy format: JSON array [{lat,lon},...]
             JSONArray arr = new JSONArray(jsonData);
 
             // Validate basic structure (lat/lon)
@@ -182,24 +238,38 @@ public class SettingsActivity extends AppCompatActivity {
                 obj.getDouble("lon");
             }
 
-            // Load existing db -> set shared -> save back
-            FogOverlay tmp = new FogOverlay(
-                    100.0f, // primary radius
-                    255,    // solid fog
-                    170,    // shared clear strength
-                    4.5
-            );
+            FogOverlay tmp = new FogOverlay(100.0f, 255, 170, 4.5);
 
-            // Load array into fog overlay and save
             tmp.loadAll(this);
             tmp.setSharedFromJsonArray(arr.toString());
             tmp.saveAll(this);
 
             Toast.makeText(this, "Shared map imported! Go back to the map to view.", Toast.LENGTH_LONG).show();
         } catch (Exception e) {
-            // throw if data is invalid or corrupted
             Toast.makeText(this, "Invalid or corrupted QR data.", Toast.LENGTH_LONG).show();
         }
     }
 
+    private void renderQrPart(ImageView view, String content, int sizePx) {
+        QRCodeWriter writer = new QRCodeWriter();
+        try {
+            BitMatrix bitMatrix = writer.encode(content, BarcodeFormat.QR_CODE, sizePx, sizePx);
+
+            int width = bitMatrix.getWidth();
+            int height = bitMatrix.getHeight();
+            Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565);
+
+            for (int x = 0; x < width; x++) {
+                for (int y = 0; y < height; y++) {
+                    bmp.setPixel(x, y, bitMatrix.get(x, y) ? Color.BLACK : Color.WHITE);
+                }
+            }
+
+            view.setImageBitmap(bmp);
+        } catch (IllegalArgumentException e) {
+            Toast.makeText(this, "Shared data too large for QR.", Toast.LENGTH_LONG).show();
+        } catch (WriterException e) {
+            Toast.makeText(this, "Failed to generate QR.", Toast.LENGTH_LONG).show();
+        }
+    }
 }
