@@ -22,29 +22,53 @@
         app:layout_constraintStart_toStartOf="parent" />
 
     <!-- Scan Map Button -->
+
+    <!-- Clear Cache Button -->
+
+    <!-- "Share Map" Label -->
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/scanMapButton"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
+        android:layout_marginTop="20dp"
         android:layout_marginEnd="24dp"
-        android:layout_marginTop="12dp"
         android:text="@string/scan_shared_map"
+        app:cornerRadius="16dp"
         app:icon="@drawable/placeholder_qr"
         app:iconGravity="textStart"
-        app:cornerRadius="16dp"
-        app:layout_constraintTop_toBottomOf="@id/returnButton"
-        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="1.0"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/returnButton"
         tools:ignore="VisualLintButtonSize" />
 
-    <!-- Clear Cache Button -->
+
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/exportLogsButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="88dp"
+        android:layout_marginEnd="24dp"
+        android:text="Export Study Logs"
+        app:cornerRadius="16dp"
+        app:icon="@drawable/placeholder_qr"
+        app:iconGravity="textStart"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="1.0"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/returnButton"
+        tools:ignore="VisualLintButtonSize" />
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/clearCacheButton"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
-        android:layout_marginTop="80dp"
+        android:layout_marginTop="156dp"
         android:layout_marginEnd="24dp"
         android:text="@string/clear_cache"
         app:cornerRadius="16dp"
@@ -56,7 +80,7 @@
         app:layout_constraintTop_toBottomOf="@id/returnButton"
         tools:ignore="VisualLintButtonSize" />
 
-    <!-- "Share Map" Label -->
+
     <TextView
         android:id="@+id/shareLabel"
         android:layout_width="wrap_content"

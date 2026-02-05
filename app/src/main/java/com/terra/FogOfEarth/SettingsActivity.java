@@ -29,6 +29,8 @@ import com.journeyapps.barcodescanner.ScanOptions;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
+
 public class SettingsActivity extends AppCompatActivity {
 
     // -- QR Scanner --
@@ -135,6 +137,23 @@ public class SettingsActivity extends AppCompatActivity {
                     Toast.LENGTH_SHORT).show();
         });
 
+        MaterialButton exportButton = findViewById(R.id.exportLogsButton);
+        exportButton.setOnClickListener(v -> {
+            try {
+                java.io.File zip = StudyExport.exportZip(this);
+                if (zip == null || !zip.exists()) {
+                    Toast.makeText(this, "Export failed: zip not created.", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                StudyExport.shareZip(this, zip);
+            } catch (Exception e) {
+                Toast.makeText(this, "Export failed: " + e.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
+                e.printStackTrace();
+            }
+        });
+
+
+
         // Button: clear cached / saved fog data
         MaterialButton clearCacheButton = findViewById(R.id.clearCacheButton);
         clearCacheButton.setOnClickListener(v -> {
@@ -142,6 +161,8 @@ public class SettingsActivity extends AppCompatActivity {
             ((ImageView) findViewById(R.id.imgQr)).setImageResource(R.drawable.placeholder_qr);
             Toast.makeText(this, "Cache cleared.", Toast.LENGTH_SHORT).show();
         });
+
+
     }
 
     /**

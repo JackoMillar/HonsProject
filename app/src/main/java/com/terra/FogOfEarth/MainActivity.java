@@ -24,7 +24,6 @@ import androidx.core.content.res.ResourcesCompat;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.mapbox.android.gestures.BuildConfig;
 
 import org.osmdroid.api.IMapController;
 import org.osmdroid.config.Configuration;
@@ -241,7 +240,12 @@ public class MainActivity extends AppCompatActivity {
             summary.put("revealDelta", revealDelta);
             summary.put("totalUncoveredPct", totalUncoveredPct);
 
-            summary.put("appVersion", BuildConfig.VERSION_NAME);
+            String versionName = "unknown";
+            try {
+                versionName = getPackageManager()
+                        .getPackageInfo(getPackageName(), 0).versionName;
+            } catch (Exception ignored) {}
+            summary.put("appVersion", versionName);
 
             StudyLogger.logSessionSummary(this, summary);
             StudyLogger.logEvent(this, "session_end", null);
