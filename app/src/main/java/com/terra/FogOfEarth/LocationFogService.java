@@ -5,11 +5,13 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
+import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import androidx.core.app.NotificationCompat;
 
@@ -21,7 +23,6 @@ public class LocationFogService extends Service {
     public static final String ACTION_PAUSE = "com.terra.FogOfEarth.action.PAUSE_BG_TRACKING";
     public static final String ACTION_RESUME = "com.terra.FogOfEarth.action.RESUME_BG_TRACKING";
 
-
     private static final String CHANNEL_ID = "fog_location";
     private static final int NOTIF_ID = 1001;
 
@@ -29,6 +30,15 @@ public class LocationFogService extends Service {
     private LocationListener locationListener;
     private boolean foregroundStarted = false;
     private boolean trackingStarted = false;
+
+    // Cached fog + filtering + save throttling
+    private FogOverlay cachedFog = null;
+
+    private Location lastAccepted = null;
+    private long lastAcceptedElapsedMs = 0L;
+
+    private long lastSaveElapsedMs = 0L;
+    private static final long SAVE_THROTTLE_MS = 15_000;
 
     /**
      * <p>Called when the service is first created.</p>
@@ -72,16 +82,6 @@ public class LocationFogService extends Service {
 
     /**
      * Starts receiving GPS location updates for background fog revealing.
-     * <p>
-     * This method is guarded so it only registers for updates once. Each location update
-     * loads the saved fog state, reveals the primary fog around the new position, and
-     * saves the updated state back to storage.
-     * </p>
-     *
-     * <p>
-     * If location permissions are not granted, the request will throw a
-     * {@link SecurityException} and tracking will not start.
-     * </p>
      */
     private void startTracking() {
         // Check if tracking has already started
@@ -90,14 +90,23 @@ public class LocationFogService extends Service {
 
         // Register for location updates
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
-        locationListener = location -> {
-            GeoPoint p = new GeoPoint(location.getLatitude(), location.getLongitude());
 
-            // Load -> reveal -> save
-            FogOverlay tmp = new FogOverlay(100.0f, 255, 170, 4.5);
-            tmp.loadAll(getApplicationContext());
-            tmp.addPrimary(p);
-            tmp.saveAll(getApplicationContext());
+        // Load fog once and keep it cached
+        cachedFog = new FogOverlay(100.0f, 255, 170, 4.5);
+        cachedFog.loadAll(getApplicationContext());
+
+        locationListener = location -> {
+            if (!shouldAcceptLocation(location)) return;
+            if (cachedFog == null) return;
+
+            GeoPoint p = new GeoPoint(location.getLatitude(), location.getLongitude());
+            cachedFog.addPrimary(p);
+
+            long now = SystemClock.elapsedRealtime();
+            if (now - lastSaveElapsedMs >= SAVE_THROTTLE_MS) {
+                lastSaveElapsedMs = now;
+                cachedFog.saveAll(getApplicationContext());
+            }
         };
 
         // Requests location updates from the GPS provider and Listener
@@ -118,9 +127,6 @@ public class LocationFogService extends Service {
 
     /**
      * Stops receiving GPS location updates for background fog revealing.
-     * <p>
-     * This method is guarded so it only unregisters for updates once.
-     * </p>
      */
     private void stopTracking() {
         // Check if tracking is already stopped
@@ -134,6 +140,35 @@ public class LocationFogService extends Service {
             } catch (SecurityException ignored) {
             }
         }
+
+        // Final save
+        if (cachedFog != null) {
+            cachedFog.saveAll(getApplicationContext());
+        }
+        cachedFog = null;
+    }
+
+    private boolean shouldAcceptLocation(Location loc) {
+        if (loc == null) return false;
+
+        long ageMs = System.currentTimeMillis() - loc.getTime();
+        if (ageMs > 10_000) return false;
+
+        if (loc.hasAccuracy() && loc.getAccuracy() > 25f) return false;
+
+        long nowElapsed = SystemClock.elapsedRealtime();
+        if (lastAccepted != null) {
+            float dist = loc.distanceTo(lastAccepted);
+            float dt = (nowElapsed - lastAcceptedElapsedMs) / 1000f;
+            if (dt > 0f) {
+                float speed = dist / dt;
+                if (speed > 8f && dist > 30f) return false;
+            }
+        }
+
+        lastAccepted = loc;
+        lastAcceptedElapsedMs = nowElapsed;
+        return true;
     }
 
     /**
@@ -155,10 +190,8 @@ public class LocationFogService extends Service {
                     "Fog of Earth location", // Channel name
                     NotificationManager.IMPORTANCE_LOW // Channel importance
             );
-            // Configure the notification channel.
             channel.setDescription("Updating explored areas in the background");
 
-            // Create NotificationManager and register the channel
             NotificationManager nm = getSystemService(NotificationManager.class);
             if (nm != null) nm.createNotificationChannel(channel);
         }

@@ -11,11 +11,14 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 public class JsonDb {
 
     // Database file name
     private static final String FILE_NAME = "fog_db.json";
+    private static final String FILE_NAME_GZ = "fog_db.json.gz";
 
     private static final String TAG = "JsonDb";
 
@@ -25,12 +28,32 @@ public class JsonDb {
      * @return JSONObject
      */
     public static JSONObject load(Context context) {
-        // Initialise file then check to see if it exists
-        File file = new File(context.getFilesDir(), FILE_NAME);
-        if (!file.exists()) return new JSONObject();
+        File gz = new File(context.getFilesDir(), FILE_NAME_GZ);
+        File legacy = new File(context.getFilesDir(), FILE_NAME);
 
-        // Parse file into JSONObject
-        try (FileInputStream fis = new FileInputStream(file);
+        // Prefer gzip; fallback to legacy json
+        if (gz.exists()) {
+            try (FileInputStream fis = new FileInputStream(gz);
+                 GZIPInputStream gis = new GZIPInputStream(fis);
+                 InputStreamReader isr = new InputStreamReader(gis, StandardCharsets.UTF_8);
+                 BufferedReader br = new BufferedReader(isr)) {
+
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                String raw = sb.toString().trim();
+                if (raw.isEmpty()) return new JSONObject();
+                return new JSONObject(raw);
+
+            } catch (Exception e) {
+                return new JSONObject();
+            }
+        }
+
+        if (!legacy.exists()) return new JSONObject();
+
+        // Parse legacy file into JSONObject
+        try (FileInputStream fis = new FileInputStream(legacy);
              InputStreamReader isr = new InputStreamReader(fis, StandardCharsets.UTF_8);
              BufferedReader br = new BufferedReader(isr)) {
 
@@ -54,15 +77,23 @@ public class JsonDb {
      * @param root JSONObject to save
      */
     public static void save(Context context, JSONObject root) {
-        // Initialise new file
-        File file = new File(context.getFilesDir(), FILE_NAME);
+        File gz = new File(context.getFilesDir(), FILE_NAME_GZ);
+        File legacy = new File(context.getFilesDir(), FILE_NAME);
 
-        // Save JSON object to file
-        try (FileOutputStream fos = new FileOutputStream(file)) {
+        try (FileOutputStream fos = new FileOutputStream(gz);
+             GZIPOutputStream gos = new GZIPOutputStream(fos)) {
+
             byte[] bytes = root.toString().getBytes(StandardCharsets.UTF_8);
-            fos.write(bytes);
-            fos.flush();
+            gos.write(bytes);
+            gos.finish();
+
         } catch (Exception ignored) {}
+
+        // Remove legacy file once gz exists (best effort)
+        if (legacy.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            legacy.delete();
+        }
     }
 
     /**
@@ -70,12 +101,14 @@ public class JsonDb {
      * @param context used to access the app’s internal storage
      */
     public static void clear(Context context) {
-        File file = new File(context.getFilesDir(), FILE_NAME);
-        if (!file.exists()) return;
+        File legacy = new File(context.getFilesDir(), FILE_NAME);
+        File gz = new File(context.getFilesDir(), FILE_NAME_GZ);
 
-        boolean deleted = file.delete();
-        if (!deleted) {
-            Log.w(TAG, "Failed to delete db file: " + file.getAbsolutePath());
+        if (legacy.exists() && !legacy.delete()) {
+            Log.w(TAG, "Failed to delete db file: " + legacy.getAbsolutePath());
+        }
+        if (gz.exists() && !gz.delete()) {
+            Log.w(TAG, "Failed to delete db file: " + gz.getAbsolutePath());
         }
     }
 

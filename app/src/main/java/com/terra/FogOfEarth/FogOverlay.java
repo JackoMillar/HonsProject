@@ -156,6 +156,16 @@ public class FogOverlay extends Overlay {
     }
 
     /**
+     * Set shared points from an encoded polyline string
+     */
+    public void setSharedFromEncodedPolyline(String encoded) {
+        try {
+            sharedPoints.clear();
+            sharedPoints.addAll(decodePolyline(encoded));
+        } catch (Exception ignored) {}
+    }
+
+    /**
      * Load all fog layers from storage into designated {@link #primaryPoints} and {@link #sharedPoints}
      * @param context Context to load from
      */
@@ -194,6 +204,17 @@ public class FogOverlay extends Overlay {
     }
 
     /**
+     * Export the primary points as a compact encoded polyline string (Google polyline format).
+     */
+    public String exportPrimaryAsEncodedPolyline() {
+        try {
+            return encodePolyline(primaryPoints);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
      * Load fog layers from storage into a list
      * @param context Context to load from
      * @param layerId Layer to load
@@ -217,17 +238,25 @@ public class FogOverlay extends Overlay {
                 if (layer == null) continue;
                 if (!layerId.equals(layer.optString("layerId"))) continue;
 
-                // Get points from layer
-                JSONArray points = layer.optJSONArray("points");
-                if (points == null) return;
-
                 out.clear();
-                // Add points to out list
-                for (int j = 0; j < points.length(); j++) {
-                    JSONObject obj = points.optJSONObject(j);
-                    if (obj == null) continue;
-                    out.add(new GeoPoint(obj.getDouble("lat"), obj.getDouble("lon")));
+
+                // NEW: encoded points
+                String enc = layer.optString("pointsEnc", "");
+                if (enc != null && !enc.isEmpty()) {
+                    out.addAll(decodePolyline(enc));
+                    return;
                 }
+
+                // LEGACY: JSON array points
+                JSONArray points = layer.optJSONArray("points");
+                if (points != null) {
+                    for (int j = 0; j < points.length(); j++) {
+                        JSONObject obj = points.optJSONObject(j);
+                        if (obj == null) continue;
+                        out.add(new GeoPoint(obj.getDouble("lat"), obj.getDouble("lon")));
+                    }
+                }
+
                 // Found layer, return
                 return;
             }
@@ -245,7 +274,7 @@ public class FogOverlay extends Overlay {
         try {
             // Load fog layers from storage
             JSONObject root = JsonDb.load(context);
-            root.put("schemaVersion", 1);
+            root.put("schemaVersion", 2);
 
             // Get fog object
             JSONObject fog = root.optJSONObject("fog");
@@ -270,20 +299,15 @@ public class FogOverlay extends Overlay {
             }
             if (layerObj == null) layerObj = new JSONObject();
 
-            // Create new points array
-            JSONArray arr = new JSONArray();
-            for (GeoPoint p : pointsList) {
-                JSONObject o = new JSONObject();
-                o.put("lat", p.getLatitude());
-                o.put("lon", p.getLongitude());
-                arr.put(o);
-            }
+            // NEW: compact encoding
+            String enc = encodePolyline(pointsList);
 
             // Update layer object
             layerObj.put("layerId", layerId);
             layerObj.put("revealRadiusMeters", radiusMeters);
             layerObj.put("minDistanceMeters", 4.5);
-            layerObj.put("points", arr);
+            layerObj.put("pointsEnc", enc);
+            layerObj.remove("points"); // drop legacy to keep DB small
 
             // Update layers array
             if (idx >= 0) layers.put(idx, layerObj);
@@ -315,5 +339,76 @@ public class FogOverlay extends Overlay {
         mapView.getProjection().toPixels(center, c);
         mapView.getProjection().toPixels(north, n);
         return (float) Math.hypot(n.x - c.x, n.y - c.y);
+    }
+
+    // ---- Polyline encoding/decoding (lat/lon scaled by 1e5) ----
+
+    private static String encodePolyline(List<GeoPoint> points) {
+        StringBuilder result = new StringBuilder();
+        long lastLat = 0;
+        long lastLon = 0;
+        for (GeoPoint p : points) {
+            long lat = Math.round(p.getLatitude() * 1e5);
+            long lon = Math.round(p.getLongitude() * 1e5);
+            long dLat = lat - lastLat;
+            long dLon = lon - lastLon;
+            encodeSigned(dLat, result);
+            encodeSigned(dLon, result);
+            lastLat = lat;
+            lastLon = lon;
+        }
+        return result.toString();
+    }
+
+    private static void encodeSigned(long value, StringBuilder out) {
+        long s = value << 1;
+        if (value < 0) s = ~s;
+        while (s >= 0x20) {
+            int nextValue = (int) ((0x20 | (s & 0x1f)) + 63);
+            out.append((char) nextValue);
+            s >>= 5;
+        }
+        out.append((char) ((int) (s + 63)));
+    }
+
+    private static List<GeoPoint> decodePolyline(String encoded) {
+        List<GeoPoint> points = new ArrayList<>();
+        int index = 0;
+        long lat = 0;
+        long lon = 0;
+
+        while (index < encoded.length()) {
+            long packedLat = decodeSigned(encoded, index);
+            index = (int) (packedLat >>> 32);
+            long dLat = (int) packedLat;
+
+            long packedLon = decodeSigned(encoded, index);
+            index = (int) (packedLon >>> 32);
+            long dLon = (int) packedLon;
+
+            lat += dLat;
+            lon += dLon;
+            points.add(new GeoPoint(lat / 1e5, lon / 1e5));
+        }
+        return points;
+    }
+
+    /**
+     * Returns a packed long: high 32 bits = new index, low 32 bits = signed delta
+     */
+    private static long decodeSigned(String encoded, int startIndex) {
+        long result = 0;
+        int shift = 0;
+        int index = startIndex;
+        int b;
+
+        do {
+            b = encoded.charAt(index++) - 63;
+            result |= (long) (b & 0x1f) << shift;
+            shift += 5;
+        } while (b >= 0x20 && index < encoded.length());
+
+        long delta = ((result & 1) != 0) ? ~(result >> 1) : (result >> 1);
+        return ((long) index << 32) | (delta & 0xffffffffL);
     }
 }
