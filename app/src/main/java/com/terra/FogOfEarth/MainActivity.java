@@ -345,8 +345,8 @@ public class MainActivity extends AppCompatActivity {
         // Location updates for fog
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         // Update logging
-        locationUpdateCount++;
         locationListener = location -> runOnUiThread(() -> {
+            locationUpdateCount++;
             if (!shouldAcceptLocation(location)) return;
             GeoPoint newPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
             fogOverlay.addPrimary(newPoint);

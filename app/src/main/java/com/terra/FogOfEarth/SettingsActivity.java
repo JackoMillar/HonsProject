@@ -1,5 +1,11 @@
 package com.terra.FogOfEarth;
 
+import com.google.zxing.EncodeHintType;
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
+
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -28,8 +34,6 @@ import com.journeyapps.barcodescanner.ScanOptions;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
-
-import java.io.File;
 
 public class SettingsActivity extends AppCompatActivity {
 
@@ -274,7 +278,13 @@ public class SettingsActivity extends AppCompatActivity {
     private void renderQrPart(ImageView view, String content, int sizePx) {
         QRCodeWriter writer = new QRCodeWriter();
         try {
-            BitMatrix bitMatrix = writer.encode(content, BarcodeFormat.QR_CODE, sizePx, sizePx);
+            Map<EncodeHintType, Object> hints = new HashMap<>();
+            hints.put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.L); // max capacity
+            hints.put(EncodeHintType.CHARACTER_SET, StandardCharsets.UTF_8.name());
+            // Optional: reduce quiet zone a bit (default is 4). Lower = more dense, sometimes harder to scan.
+            hints.put(EncodeHintType.MARGIN, 2);
+
+            BitMatrix bitMatrix = writer.encode(content, BarcodeFormat.QR_CODE, sizePx, sizePx, hints);
 
             int width = bitMatrix.getWidth();
             int height = bitMatrix.getHeight();
@@ -288,9 +298,10 @@ public class SettingsActivity extends AppCompatActivity {
 
             view.setImageBitmap(bmp);
         } catch (IllegalArgumentException e) {
-            Toast.makeText(this, "Shared data too large for QR.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Shared data too large for a single QR.", Toast.LENGTH_LONG).show();
         } catch (WriterException e) {
             Toast.makeText(this, "Failed to generate QR.", Toast.LENGTH_LONG).show();
         }
     }
+
 }
