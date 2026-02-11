@@ -51,9 +51,6 @@ public class MainActivity extends AppCompatActivity {
     private LocationManager locationManager;
     private LocationListener locationListener;
 
-    // Location sanity filter state
-    private Location lastAccepted = null;
-    private long lastAcceptedElapsedMs = 0L;
 
     // -- Permissions --
     // Permission launcher
@@ -68,13 +65,6 @@ public class MainActivity extends AppCompatActivity {
     // -- Logging --
     private int locationUpdateCount = 0;
     // Count when location updates are accepted
-    private int acceptedLocationCount = 0;
-    // Count when location updates are rejected
-    private int rejectedLocationCount = 0;
-    // Specific reasons for rejection
-    private int rejectStale = 0;
-    private int rejectPoorAccuracy = 0;
-    private int rejectJump = 0;
 
     private long sessionStartTs = 0L;
 
@@ -183,8 +173,6 @@ public class MainActivity extends AppCompatActivity {
         // Logging
         StudyLogger.logEvent(this, "session_start", null);
         sessionStartTs = System.currentTimeMillis();
-        locationUpdateCount = acceptedLocationCount = rejectedLocationCount = 0;
-        rejectStale = rejectPoorAccuracy = rejectJump = 0;
 
         if (map != null) {
             Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this));
@@ -230,12 +218,6 @@ public class MainActivity extends AppCompatActivity {
             summary.put("durationMs", durationMs);
 
             summary.put("locationUpdateCount", locationUpdateCount);
-            summary.put("acceptedLocationCount", acceptedLocationCount);
-            summary.put("rejectedLocationCount", rejectedLocationCount);
-
-            summary.put("rejectStale", rejectStale);
-            summary.put("rejectPoorAccuracy", rejectPoorAccuracy);
-            summary.put("rejectJump", rejectJump);
 
             summary.put("revealDelta", revealDelta);
             summary.put("totalUncoveredPct", totalUncoveredPct);
@@ -347,7 +329,6 @@ public class MainActivity extends AppCompatActivity {
         // Update logging
         locationListener = location -> runOnUiThread(() -> {
             locationUpdateCount++;
-            if (!shouldAcceptLocation(location)) return;
             GeoPoint newPoint = new GeoPoint(location.getLatitude(), location.getLongitude());
             fogOverlay.addPrimary(newPoint);
             map.invalidate();
@@ -366,48 +347,6 @@ public class MainActivity extends AppCompatActivity {
             // Throw if location permission is not granted
             e.printStackTrace();
         }
-    }
-
-    /**
-     * Filters GPS jumps (common indoors) so you don't unveil fog from bad fixes.
-     */
-    private boolean shouldAcceptLocation(Location loc) {
-        if (loc == null) {
-            rejectedLocationCount++;
-            return false;
-        }
-
-        long ageMs = System.currentTimeMillis() - loc.getTime();
-        if (ageMs > 10_000) {
-            rejectedLocationCount++;
-            rejectStale++;
-            return false;
-        }
-
-        if (loc.hasAccuracy() && loc.getAccuracy() > 25f) {
-            rejectedLocationCount++;
-            rejectPoorAccuracy++;
-            return false;
-        }
-
-        long nowElapsed = SystemClock.elapsedRealtime();
-        if (lastAccepted != null) {
-            float dist = loc.distanceTo(lastAccepted);
-            float dt = (nowElapsed - lastAcceptedElapsedMs) / 1000f;
-            if (dt > 0f) {
-                float speed = dist / dt;
-                if (speed > 8f && dist > 30f) {
-                    rejectedLocationCount++;
-                    rejectJump++;
-                    return false;
-                }
-            }
-        }
-
-        acceptedLocationCount++;
-        lastAccepted = loc;
-        lastAcceptedElapsedMs = nowElapsed;
-        return true;
     }
 
     // -- Fog Services --
