@@ -2,7 +2,6 @@ package com.terra.FogOfEarth;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.os.Build;
 
 import org.json.JSONObject;
 
@@ -15,10 +14,11 @@ public final class StudyLogger {
 
     private static final String PREFS = "study_prefs";
     private static final String KEY_PID = "participant_id";
+    private static final String KEY_SESSION_NO = "session_no";
+    private static final String KEY_MAP_SHARE_COUNT = "map_share_count";
 
     private static final String DIR = "study_logs";
     private static final String SESSIONS = "sessions.ndjson";
-    private static final String EVENTS = "events.ndjson";
 
     private StudyLogger() {}
 
@@ -32,6 +32,25 @@ public final class StudyLogger {
         return id;
     }
 
+    public static int nextSessionNumber(Context ctx) {
+        SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        int current = sp.getInt(KEY_SESSION_NO, 0) + 1;
+        sp.edit().putInt(KEY_SESSION_NO, current).apply();
+        return current;
+    }
+
+    public static int incrementMapShareCount(Context ctx) {
+        SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        int current = sp.getInt(KEY_MAP_SHARE_COUNT, 0) + 1;
+        sp.edit().putInt(KEY_MAP_SHARE_COUNT, current).apply();
+        return current;
+    }
+
+    public static int getMapShareCount(Context ctx) {
+        SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        return sp.getInt(KEY_MAP_SHARE_COUNT, 0);
+    }
+
     public static File getLogsDir(Context ctx) {
         File dir = new File(ctx.getFilesDir(), DIR);
         if (!dir.exists()) dir.mkdirs();
@@ -42,45 +61,19 @@ public final class StudyLogger {
         return new File(getLogsDir(ctx), SESSIONS);
     }
 
-    public static File getEventsFile(Context ctx) {
-        return new File(getLogsDir(ctx), EVENTS);
-    }
-
-    // Append one JSON object as a single line (NDJSON)
     private static void appendLine(File file, JSONObject obj) {
         try (FileOutputStream fos = new FileOutputStream(file, true)) {
-            String line = obj.toString() + "\n";
-            fos.write(line.getBytes(StandardCharsets.UTF_8));
+            fos.write((obj.toString() + "\n").getBytes(StandardCharsets.UTF_8));
             fos.flush();
         } catch (Exception ignored) {}
     }
 
-    public static void logEvent(Context ctx, String name, JSONObject extra) {
+    /** Writes one session summary (NDJSON line). */
+    public static void logSession(Context ctx, JSONObject sessionSummary) {
         try {
-            JSONObject obj = new JSONObject();
-            obj.put("type", "event");
-            obj.put("ts", System.currentTimeMillis());
-            obj.put("participantId", getParticipantId(ctx));
-            obj.put("name", name);
-
-            obj.put("device", Build.MODEL);
-            obj.put("android", Build.VERSION.SDK_INT);
-
-            if (extra != null) obj.put("extra", extra);
-
-            appendLine(getEventsFile(ctx), obj);
-        } catch (Exception ignored) {}
-    }
-
-    public static void logSessionSummary(Context ctx, JSONObject summary) {
-        try {
-            JSONObject obj = new JSONObject(summary.toString()); // copy
-            obj.put("type", "session");
-            obj.put("participantId", getParticipantId(ctx));
-            obj.put("device", Build.MODEL);
-            obj.put("android", Build.VERSION.SDK_INT);
-
-            appendLine(getSessionsFile(ctx), obj);
+            // Always attach participant id
+            sessionSummary.put("participantId", getParticipantId(ctx));
+            appendLine(getSessionsFile(ctx), sessionSummary);
         } catch (Exception ignored) {}
     }
 }

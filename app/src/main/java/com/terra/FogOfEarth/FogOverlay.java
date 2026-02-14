@@ -130,6 +130,87 @@ public class FogOverlay extends Overlay {
         canvas.restoreToCount(layerId);
     }
 
+    /**
+     * Estimates the fraction of area NOT yet uncovered (i.e., still fogged) inside a dynamic
+     * bounding box around the user's revealed points. Intended for lightweight longitudinal metrics,
+     * not exact geodesic area.
+     *
+     * @return uncovered fraction in [0,1] (1.0 = nothing revealed)
+     */
+    public double estimateUncoveredPercent() {
+        if (primaryPoints.isEmpty()) return 1.0;
+
+        double minLat = Double.POSITIVE_INFINITY, maxLat = Double.NEGATIVE_INFINITY;
+        double minLon = Double.POSITIVE_INFINITY, maxLon = Double.NEGATIVE_INFINITY;
+        double latSum = 0.0;
+
+        for (GeoPoint p : primaryPoints) {
+            double lat = p.getLatitude();
+            double lon = p.getLongitude();
+            latSum += lat;
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+            if (lon < minLon) minLon = lon;
+            if (lon > maxLon) maxLon = lon;
+        }
+
+        double latMid = latSum / primaryPoints.size();
+
+        // Padding around explored area (meters)
+        final double padM = 200.0;
+        double degPerMeterLat = 1.0 / 111320.0;
+        double degPerMeterLon = 1.0 / (111320.0 * Math.max(0.2, Math.cos(Math.toRadians(latMid))));
+
+        minLat -= padM * degPerMeterLat;
+        maxLat += padM * degPerMeterLat;
+        minLon -= padM * degPerMeterLon;
+        maxLon += padM * degPerMeterLon;
+
+        // Approx width/height in meters
+        double heightM = (maxLat - minLat) * 111320.0;
+        double widthM = (maxLon - minLon) * (111320.0 * Math.max(0.2, Math.cos(Math.toRadians(latMid))));
+        if (heightM <= 0 || widthM <= 0) return 1.0;
+
+        // Adaptive sampling step so this remains cheap even for large bounds
+        final int targetMaxCells = 20000;
+        double areaM2 = Math.max(1.0, widthM * heightM);
+        double stepM = Math.max(50.0, Math.sqrt(areaM2 / targetMaxCells));
+        stepM = Math.min(stepM, 250.0);
+
+        double latStep = stepM * degPerMeterLat;
+        double lonStep = stepM * degPerMeterLon;
+
+        int total = 0;
+        int covered = 0;
+
+        // Radius with slack for grid sampling
+        double coverRadiusM = primaryRadiusMeters + (stepM * 0.8);
+
+        for (double lat = minLat; lat <= maxLat; lat += latStep) {
+            for (double lon = minLon; lon <= maxLon; lon += lonStep) {
+                total++;
+                GeoPoint cell = new GeoPoint(lat, lon);
+
+                boolean isCovered = false;
+                for (GeoPoint p : primaryPoints) {
+                    if (p.distanceToAsDouble(cell) <= coverRadiusM) {
+                        isCovered = true;
+                        break;
+                    }
+                }
+                if (isCovered) covered++;
+            }
+        }
+
+        if (total <= 0) return 1.0;
+        double coveredFrac = covered / (double) total;
+        double uncoveredFrac = 1.0 - coveredFrac;
+        if (uncoveredFrac < 0) uncoveredFrac = 0;
+        if (uncoveredFrac > 1) uncoveredFrac = 1;
+        return uncoveredFrac;
+    }
+
+
     /** Add point to {@link #primaryPoints}
      * @param point Point to reveal at
      */

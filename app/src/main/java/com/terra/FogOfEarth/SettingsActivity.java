@@ -240,14 +240,24 @@ public class SettingsActivity extends AppCompatActivity {
                     return;
                 }
 
+                // Assemble full encoded string
                 StringBuilder sb = new StringBuilder();
                 for (String s : importParts) sb.append(s);
                 String encoded = sb.toString();
 
+                // Save to shared layer
                 FogOverlay tmp = new FogOverlay(100.0f, 255, 170, 4.5);
                 tmp.loadAll(this);
                 tmp.setSharedFromEncodedPolyline(encoded);
                 tmp.saveAll(this);
+
+                // ✅ Increment ONLY on successful import completion
+                StudyLogger.incrementMapShareCount(this);
+
+                // Reset collector so a later scan starts cleanly
+                importTransferId = null;
+                importParts = null;
+                importTotal = 0;
 
                 Toast.makeText(this, "Shared map imported! Go back to the map to view.", Toast.LENGTH_LONG).show();
                 return;
@@ -264,10 +274,12 @@ public class SettingsActivity extends AppCompatActivity {
             }
 
             FogOverlay tmp = new FogOverlay(100.0f, 255, 170, 4.5);
-
             tmp.loadAll(this);
             tmp.setSharedFromJsonArray(arr.toString());
             tmp.saveAll(this);
+
+            // ✅ Increment ONLY on successful import
+            StudyLogger.incrementMapShareCount(this);
 
             Toast.makeText(this, "Shared map imported! Go back to the map to view.", Toast.LENGTH_LONG).show();
         } catch (Exception e) {
