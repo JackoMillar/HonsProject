@@ -310,10 +310,7 @@ public class MainActivity extends AppCompatActivity {
             // Distance travelled while tracking (no path stored)
             if (sessionActive) {
                 if (lastDistanceLoc != null) {
-                    float d = location.distanceTo(lastDistanceLoc);
-                    if (d >= 3f && d <= 500f) {
-                        sessionDistanceM += d;
-                    }
+                    sessionDistanceM += location.distanceTo(lastDistanceLoc);
                 }
                 lastDistanceLoc = location;
             }
