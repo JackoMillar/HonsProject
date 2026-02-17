@@ -70,9 +70,10 @@ public class MainActivity extends AppCompatActivity {
     private static int sessionNumber = 0;
 
     private static double sessionDistanceM = 0.0;
-    private static Location lastDistanceLoc = null;
-    private static boolean lifecycleRegistered = false;
 
+    /**
+     *
+     */
     private void registerAppLifecycleOnce() {
         if (lifecycleRegistered) return;
         lifecycleRegistered = true;
@@ -113,7 +114,14 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+    private static Location lastDistanceLoc = null;
 
+    private static boolean lifecycleRegistered = false;
+
+    /**
+     * Logs the end of the current session
+     * @param ctx Context
+     */
     private static void logSessionEnd(Context ctx) {
         try {
             long endTs = System.currentTimeMillis();
@@ -141,6 +149,12 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception ignored) {}
     }
 
+    /**
+     * <p>Called when the activity is first created.</p>
+     * <p>Initialises and Creates Map & Location Overlay, User's Custom marker</p>
+     * <p>Creates and sets the Settings Button and the Center Location Button</p>
+     * <p>Checks Location Permission {@link #checkLocationPermission()}</p>
+     */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -212,6 +226,11 @@ public class MainActivity extends AppCompatActivity {
         checkLocationPermission();
     }
 
+    /**
+     * <p> Called when the activity is about to become visible.</p>
+     * <p> Starts Map and Checks Location Permission {@link #checkLocationPermission()}</p>
+     * <p> Pauses background tracking</p>
+     */
     @Override
     protected void onResume() {
         super.onResume();
@@ -232,6 +251,12 @@ public class MainActivity extends AppCompatActivity {
         sendFogServiceCommand(LocationFogService.ACTION_PAUSE);
     }
 
+    /**
+     * <p> Called when the activity is no longer visible.</p>
+     * <p> Saves fog to JSON DB</p>
+     * <p> Pauses Map and Stops GPS updates</p>
+     * <p> {@link #sendFogServiceCommand(String action)}Resumes background tracking </p>
+     */
     @Override
     protected void onPause() {
         super.onPause();
@@ -257,6 +282,12 @@ public class MainActivity extends AppCompatActivity {
         sendFogServiceCommand(LocationFogService.ACTION_RESUME);
     }
 
+    /**
+     * <p> Called when the activity is about to be destroyed.</p>
+     * <p> Saves fog to JSON DB</p>
+     * <p> Detach Map and Stops GPS updates</p>
+     * <p> Resumes background tracking </p>
+     */
     @Override
     protected void onDestroy() {
         super.onDestroy();
@@ -272,6 +303,9 @@ public class MainActivity extends AppCompatActivity {
         sendFogServiceCommand(LocationFogService.ACTION_RESUME);
     }
 
+    /**
+     * <p> Centers the map on the user's current location.</p>
+     */
     private void centerMapOnCurrentLocation() {
         myLocationOverlay.disableFollowLocation();
         GeoPoint myLocation = myLocationOverlay.getMyLocation();
@@ -283,6 +317,12 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * <p>Enables location tracking of the user.</p>
+     * <p>Starts up {@link #startFogService()} for background tracking</p>
+     * <p>{@link #fogOverlay} reveals fog on startup</p>
+     * <p>Starts {@link LocationListener} for GPS updates</p>
+     */
     private void enableLocationTracking() {
         myLocationOverlay.disableFollowLocation();
         startFogService();
@@ -334,10 +374,18 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * <p> Calls {@link #sendFogServiceCommand(String action)}</p>
+     */
     private void startFogService() {
         sendFogServiceCommand(null);
     }
 
+    /**
+     * Sends an optional action command to {@link LocationFogService} by starting the service.
+     *
+     * @param action Action string to set on the Intent, or {@code null} to start without an action.
+     */
     private void sendFogServiceCommand(String action) {
         Intent i = new Intent(this, LocationFogService.class);
         if (action != null) i.setAction(action);
@@ -351,15 +399,30 @@ public class MainActivity extends AppCompatActivity {
         } catch (RuntimeException ignored) {}
     }
 
+    /**
+     * Converts dp to px
+     *
+     * @return Converted dp
+     */
     private int dpToPx() {
         return Math.round((float) 48.0 * getResources().getDisplayMetrics().density);
     }
 
+    /**
+     * Scales a bitmap to a given dp size
+     *
+     * @param src Bitmap to scale
+     * @return Scaled bitmap
+     */
     private Bitmap scaleBitmapToDp(Bitmap src) {
         int px = dpToPx();
         return Bitmap.createScaledBitmap(src, px, px, true);
     }
 
+    /**
+     * If application has no location permission, request it.
+     * Otherwise, call {@link #enableLocationTracking()}
+     */
     private void checkLocationPermission() {
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                 ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {

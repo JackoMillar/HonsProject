@@ -34,9 +34,6 @@ public class LocationFogService extends Service {
     // Cached fog + filtering + save throttling
     private FogOverlay cachedFog = null;
 
-    private Location lastAccepted = null;
-    private long lastAcceptedElapsedMs = 0L;
-
     private long lastSaveElapsedMs = 0L;
     private static final long SAVE_THROTTLE_MS = 15_000;
 
@@ -96,8 +93,7 @@ public class LocationFogService extends Service {
         cachedFog.loadAll(getApplicationContext());
 
         locationListener = location -> {
-            if (!shouldAcceptLocation(location)) return;
-            if (cachedFog == null) return;
+            if (location == null || cachedFog == null) return;
 
             GeoPoint p = new GeoPoint(location.getLatitude(), location.getLongitude());
             cachedFog.addPrimary(p);
@@ -146,29 +142,6 @@ public class LocationFogService extends Service {
             cachedFog.saveAll(getApplicationContext());
         }
         cachedFog = null;
-    }
-
-    private boolean shouldAcceptLocation(Location loc) {
-        if (loc == null) return false;
-
-        long ageMs = System.currentTimeMillis() - loc.getTime();
-        if (ageMs > 10_000) return false;
-
-        if (loc.hasAccuracy() && loc.getAccuracy() > 25f) return false;
-
-        long nowElapsed = SystemClock.elapsedRealtime();
-        if (lastAccepted != null) {
-            float dist = loc.distanceTo(lastAccepted);
-            float dt = (nowElapsed - lastAcceptedElapsedMs) / 1000f;
-            if (dt > 0f) {
-                float speed = dist / dt;
-                if (speed > 8f && dist > 30f) return false;
-            }
-        }
-
-        lastAccepted = loc;
-        lastAcceptedElapsedMs = nowElapsed;
-        return true;
     }
 
     /**
