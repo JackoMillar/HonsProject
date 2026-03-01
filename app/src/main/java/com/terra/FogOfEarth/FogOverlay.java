@@ -285,13 +285,50 @@ public class FogOverlay extends Overlay {
     }
 
     /**
-     * Export the primary points as a compact encoded polyline string (Google polyline format).
+     * Export primary points as multiple *self-contained* encoded polylines, each kept under maxSegmentLen chars.
+     * Each segment can be decoded independently (so every QR can apply instantly).
      */
-    public String exportPrimaryAsEncodedPolyline() {
+    public List<String> exportPrimaryAsEncodedPolylineSegments(int maxSegmentLen) {
+        List<String> out = new ArrayList<>();
+        if (maxSegmentLen < 50) maxSegmentLen = 50;
+
+        ArrayList<GeoPoint> seg = new ArrayList<>();
+        for (GeoPoint p : primaryPoints) {
+            seg.add(p);
+
+            String enc = "";
+            try { enc = encodePolyline(seg); } catch (Exception ignored) {}
+
+            if (enc.length() > maxSegmentLen && seg.size() > 1) {
+                GeoPoint last = seg.remove(seg.size() - 1);
+                try { out.add(encodePolyline(seg)); } catch (Exception ignored) {}
+                seg.clear();
+                seg.add(last);
+            }
+        }
+
+        if (!seg.isEmpty()) {
+            try { out.add(encodePolyline(seg)); } catch (Exception ignored) {}
+        }
+
+        if (out.isEmpty() && !primaryPoints.isEmpty()) {
+            try { out.add(encodePolyline(primaryPoints)); } catch (Exception ignored) {}
+        }
+
+        return out;
+    }
+
+    /**
+     * Append a decoded polyline segment into the shared layer (does not replace existing shared points).
+     * Returns number of points appended (0 if decode fails).
+     */
+    public int appendSharedFromEncodedPolyline(String encoded) {
         try {
-            return encodePolyline(primaryPoints);
-        } catch (Exception e) {
-            return "";
+            List<GeoPoint> pts = decodePolyline(encoded);
+            sharedPoints.addAll(pts);
+            return pts.size();
+        } catch (Exception ignored) {
+            return 0;
         }
     }
 
@@ -491,5 +528,19 @@ public class FogOverlay extends Overlay {
 
         long delta = ((result & 1) != 0) ? ~(result >> 1) : (result >> 1);
         return ((long) index << 32) | (delta & 0xffffffffL);
+    }
+
+    // Returns a copy of primary points so SettingsActivity can chunk by points
+    public List<GeoPoint> getPrimaryPointsCopy() {
+        return new ArrayList<>(primaryPoints);
+    }
+
+    // Public wrapper so SettingsActivity can encode segments
+    public static String encodePolylinePublic(List<GeoPoint> points) {
+        try {
+            return encodePolyline(points);
+        } catch (Exception e) {
+            return "";
+        }
     }
 }

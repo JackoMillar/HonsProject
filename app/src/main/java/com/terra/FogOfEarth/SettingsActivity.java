@@ -34,6 +34,9 @@ import com.journeyapps.barcodescanner.ScanOptions;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.util.ArrayList;
+import java.util.List;
+import org.osmdroid.util.GeoPoint;
 
 public class SettingsActivity extends AppCompatActivity {
 
@@ -104,27 +107,40 @@ public class SettingsActivity extends AppCompatActivity {
         FogOverlay tmp = new FogOverlay(100.0f, 255, 170, 4.5);
         tmp.loadAll(this);
 
-        String encoded = tmp.exportPrimaryAsEncodedPolyline();
-        if (encoded == null) encoded = "";
-
         // QR image size in pixels
         int qrSize = 900;
 
-        // Build QR payload(s)
-        final int MAX_PART_LEN = 1200;
+        // Build QR payload(s) - NEW: self-contained segments (FOG3)
+        final int MAX_SEG_LEN = 800; // keep it smaller = scans easier
         String transferId = String.valueOf(System.currentTimeMillis());
 
-        if (encoded.isEmpty()) {
-            qrParts = new String[] { "FOG2|EMPTY|1/1|" };
+        List<GeoPoint> primaryPts = tmp.getPrimaryPointsCopy();
+
+        if (primaryPts.isEmpty()) {
+            qrParts = new String[] { "FOG3|EMPTY|1/1|" };
         } else {
-            int total = (int) Math.ceil((double) encoded.length() / MAX_PART_LEN);
-            if (total < 1) total = 1;
+            ArrayList<String> chunks = new ArrayList<>();
+            ArrayList<GeoPoint> seg = new ArrayList<>();
+
+            for (GeoPoint p : primaryPts) {
+                seg.add(p);
+                String enc = FogOverlay.encodePolylinePublic(seg);
+
+                // If segment got too big, finalise previous segment and start a new one
+                if (enc.length() > MAX_SEG_LEN && seg.size() > 1) {
+                    GeoPoint last = seg.remove(seg.size() - 1);
+                    chunks.add(FogOverlay.encodePolylinePublic(seg));
+                    seg.clear();
+                    seg.add(last);
+                }
+            }
+
+            if (!seg.isEmpty()) chunks.add(FogOverlay.encodePolylinePublic(seg));
+
+            int total = chunks.size();
             qrParts = new String[total];
             for (int i = 0; i < total; i++) {
-                int start = i * MAX_PART_LEN;
-                int end = Math.min(encoded.length(), (i + 1) * MAX_PART_LEN);
-                String chunk = encoded.substring(start, end);
-                qrParts[i] = "FOG2|" + transferId + "|" + (i + 1) + "/" + total + "|" + chunk;
+                qrParts[i] = "FOG3|" + transferId + "|" + (i + 1) + "/" + total + "|" + chunks.get(i);
             }
         }
 
@@ -196,95 +212,68 @@ public class SettingsActivity extends AppCompatActivity {
      * @param jsonData scanned data
      */
     private void handleScannedMapData(String jsonData) {
-        try {
-            // New format: FOG2|transferId|part/total|chunk
-            if (jsonData != null && jsonData.startsWith("FOG2|")) {
-                if (jsonData.equals("FOG2|EMPTY|1/1|")) {
-                    Toast.makeText(this, "That QR contains no progress.", Toast.LENGTH_LONG).show();
-                    return;
-                }
-
-                String[] parts = jsonData.split("\\|", 4);
-                if (parts.length < 4) throw new IllegalArgumentException("Bad FOG2 payload");
-
-                String tId = parts[1];
-                String frac = parts[2];
-                String chunk = parts[3];
-
-                String[] ft = frac.split("/");
-                int partNum = Integer.parseInt(ft[0]);
-                int total = Integer.parseInt(ft[1]);
-                if (partNum < 1 || partNum > total) throw new IllegalArgumentException("Bad part index");
-
-                // (Re)initialise collector if new transfer
-                if (importTransferId == null || !importTransferId.equals(tId)) {
-                    importTransferId = tId;
-                    importTotal = total;
-                    importParts = new String[total];
-                }
-
-                if (importParts == null || importParts.length != total) {
-                    importTotal = total;
-                    importParts = new String[total];
-                }
-
-                importParts[partNum - 1] = chunk;
-
-                int have = 0;
-                for (String s : importParts) if (s != null) have++;
-
-                if (have < total) {
-                    Toast.makeText(this,
-                            "Scanned part " + partNum + " / " + total + " (" + have + " collected)",
-                            Toast.LENGTH_SHORT).show();
-                    return;
-                }
-
-                // Assemble full encoded string
-                StringBuilder sb = new StringBuilder();
-                for (String s : importParts) sb.append(s);
-                String encoded = sb.toString();
-
-                // Save to shared layer
-                FogOverlay tmp = new FogOverlay(100.0f, 255, 170, 4.5);
-                tmp.loadAll(this);
-                tmp.setSharedFromEncodedPolyline(encoded);
-                tmp.saveAll(this);
-
-                // ✅ Increment ONLY on successful import completion
-                StudyLogger.incrementMapShareCount(this);
-
-                // Reset collector so a later scan starts cleanly
-                importTransferId = null;
-                importParts = null;
-                importTotal = 0;
-
-                Toast.makeText(this, "Shared map imported! Go back to the map to view.", Toast.LENGTH_LONG).show();
+        // NEW format: FOG3|transferId|part/total|encodedSegment
+        if (jsonData != null && jsonData.startsWith("FOG3|")) {
+            if (jsonData.equals("FOG3|EMPTY|1/1|")) {
+                Toast.makeText(this, "That QR contains no progress.", Toast.LENGTH_LONG).show();
                 return;
             }
 
-            // Legacy format: JSON array [{lat,lon},...]
-            JSONArray arr = new JSONArray(jsonData);
+            String[] parts = jsonData.split("\\|", 4);
+            if (parts.length < 4) throw new IllegalArgumentException("Bad FOG3 payload");
 
-            // Validate basic structure (lat/lon)
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject obj = arr.getJSONObject(i);
-                obj.getDouble("lat");
-                obj.getDouble("lon");
+            String tId = parts[1];
+            String frac = parts[2];
+            String chunk = parts[3];
+
+            String[] ft = frac.split("/");
+            int partNum = Integer.parseInt(ft[0]);
+            int total = Integer.parseInt(ft[1]);
+
+            // (Re)initialise collector if new transfer
+            if (importTransferId == null || !importTransferId.equals(tId)) {
+                importTransferId = tId;
+                importTotal = total;
+                importParts = new String[total];
             }
 
+            if (partNum < 1 || partNum > total) {
+                Toast.makeText(this, "Bad QR part index.", Toast.LENGTH_LONG).show();
+                return;
+            }
+
+            // ignore duplicates
+            if (importParts[partNum - 1] != null) {
+                Toast.makeText(this, "Already scanned part " + partNum + " / " + total, Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            importParts[partNum - 1] = chunk;
+
+            // ✅ Append this scanned QR immediately
             FogOverlay tmp = new FogOverlay(100.0f, 255, 170, 4.5);
             tmp.loadAll(this);
-            tmp.setSharedFromJsonArray(arr.toString());
+            int added = tmp.appendSharedFromEncodedPolyline(chunk);
             tmp.saveAll(this);
 
-            // ✅ Increment ONLY on successful import
-            StudyLogger.incrementMapShareCount(this);
+            int have = 0;
+            for (String s : importParts) if (s != null) have++;
 
-            Toast.makeText(this, "Shared map imported! Go back to the map to view.", Toast.LENGTH_LONG).show();
-        } catch (Exception e) {
-            Toast.makeText(this, "Invalid or corrupted QR data.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this,
+                    "Added " + added + " points from part " + partNum + " / " + total +
+                            " (" + have + " scanned)",
+                    Toast.LENGTH_LONG).show();
+
+            // Optional: only count a “full share” when all parts scanned
+            if (have == total) {
+                StudyLogger.incrementMapShareCount(this);
+                importTransferId = null;
+                importParts = null;
+                importTotal = 0;
+            }
+            return;
         }
+        Toast.makeText(this, "Unrecognised QR format.", Toast.LENGTH_LONG).show();
     }
 
     private void renderQrPart(ImageView view, String content, int sizePx) {
