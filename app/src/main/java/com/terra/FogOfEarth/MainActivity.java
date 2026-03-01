@@ -10,7 +10,6 @@ import android.graphics.Canvas;
 import android.graphics.Point;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
@@ -26,7 +25,6 @@ import androidx.preference.PreferenceManager;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
-import org.json.JSONObject;
 import org.osmdroid.api.IMapController;
 import org.osmdroid.config.Configuration;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
@@ -62,18 +60,10 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-    // ---- Minimal Session Metrics (only what you asked for) ----
+    // ---- App lifecycle tracking (foreground/background) ----
     private static int startedActivities = 0;
-    private static boolean sessionActive = false;
+    private static boolean lifecycleRegistered = false;
 
-    private static long sessionStartTs = 0L;
-    private static int sessionNumber = 0;
-
-    private static double sessionDistanceM = 0.0;
-
-    /**
-     *
-     */
     private void registerAppLifecycleOnce() {
         if (lifecycleRegistered) return;
         lifecycleRegistered = true;
@@ -89,14 +79,9 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onActivityStarted(Activity activity) {
                 startedActivities++;
-                if (startedActivities == 1 && !sessionActive) {
-                    // App entered foreground -> start session
-                    sessionActive = true;
-                    sessionStartTs = System.currentTimeMillis();
-                    sessionNumber = StudyLogger.nextSessionNumber(activity.getApplicationContext());
-
-                    sessionDistanceM = 0.0;
-                    lastDistanceLoc = null;
+                if (startedActivities == 1) {
+                    // App entered foreground
+                    StudyLogger.onAppForeground(activity.getApplicationContext());
                 }
             }
 
@@ -105,56 +90,13 @@ public class MainActivity extends AppCompatActivity {
                 startedActivities--;
                 if (startedActivities <= 0) {
                     startedActivities = 0;
-                    if (sessionActive) {
-                        // App entered background -> end session
-                        sessionActive = false;
-                        logSessionEnd(activity.getApplicationContext());
-                    }
+                    // App entered background (do NOT end session; distance continues in LocationFogService)
+                    StudyLogger.onAppBackground(activity.getApplicationContext());
                 }
             }
         });
     }
-    private static Location lastDistanceLoc = null;
 
-    private static boolean lifecycleRegistered = false;
-
-    /**
-     * Logs the end of the current session
-     * @param ctx Context
-     */
-    private static void logSessionEnd(Context ctx) {
-        try {
-            long endTs = System.currentTimeMillis();
-            long durationMs = (sessionStartTs > 0) ? (endTs - sessionStartTs) : 0L;
-
-            JSONObject s = new JSONObject();
-            s.put("type", "session");
-            s.put("sessionId", java.util.UUID.randomUUID().toString());
-
-            // Time spent per session
-            s.put("startTs", sessionStartTs);
-            s.put("endTs", endTs);
-            s.put("durationMs", durationMs);
-
-            // Number of sessions
-            s.put("sessionNumber", sessionNumber);
-
-            // Distance travelled while tracking
-            s.put("sessionDistanceM", sessionDistanceM);
-
-            // Number of times map data was shared (cumulative)
-            s.put("mapShareCount", StudyLogger.getMapShareCount(ctx));
-
-            StudyLogger.logSession(ctx, s);
-        } catch (Exception ignored) {}
-    }
-
-    /**
-     * <p>Called when the activity is first created.</p>
-     * <p>Initialises and Creates Map & Location Overlay, User's Custom marker</p>
-     * <p>Creates and sets the Settings Button and the Center Location Button</p>
-     * <p>Checks Location Permission {@link #checkLocationPermission()}</p>
-     */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -226,11 +168,6 @@ public class MainActivity extends AppCompatActivity {
         checkLocationPermission();
     }
 
-    /**
-     * <p> Called when the activity is about to become visible.</p>
-     * <p> Starts Map and Checks Location Permission {@link #checkLocationPermission()}</p>
-     * <p> Pauses background tracking</p>
-     */
     @Override
     protected void onResume() {
         super.onResume();
@@ -251,12 +188,6 @@ public class MainActivity extends AppCompatActivity {
         sendFogServiceCommand(LocationFogService.ACTION_PAUSE);
     }
 
-    /**
-     * <p> Called when the activity is no longer visible.</p>
-     * <p> Saves fog to JSON DB</p>
-     * <p> Pauses Map and Stops GPS updates</p>
-     * <p> {@link #sendFogServiceCommand(String action)}Resumes background tracking </p>
-     */
     @Override
     protected void onPause() {
         super.onPause();
@@ -282,12 +213,6 @@ public class MainActivity extends AppCompatActivity {
         sendFogServiceCommand(LocationFogService.ACTION_RESUME);
     }
 
-    /**
-     * <p> Called when the activity is about to be destroyed.</p>
-     * <p> Saves fog to JSON DB</p>
-     * <p> Detach Map and Stops GPS updates</p>
-     * <p> Resumes background tracking </p>
-     */
     @Override
     protected void onDestroy() {
         super.onDestroy();
@@ -303,9 +228,6 @@ public class MainActivity extends AppCompatActivity {
         sendFogServiceCommand(LocationFogService.ACTION_RESUME);
     }
 
-    /**
-     * <p> Centers the map on the user's current location.</p>
-     */
     private void centerMapOnCurrentLocation() {
         myLocationOverlay.disableFollowLocation();
         GeoPoint myLocation = myLocationOverlay.getMyLocation();
@@ -317,12 +239,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * <p>Enables location tracking of the user.</p>
-     * <p>Starts up {@link #startFogService()} for background tracking</p>
-     * <p>{@link #fogOverlay} reveals fog on startup</p>
-     * <p>Starts {@link LocationListener} for GPS updates</p>
-     */
     private void enableLocationTracking() {
         myLocationOverlay.disableFollowLocation();
         startFogService();
@@ -337,7 +253,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }));
 
-        // prevent duplicate listeners
         if (locationManager != null && locationListener != null) {
             try { locationManager.removeUpdates(locationListener); } catch (SecurityException ignored) {}
         }
@@ -347,15 +262,9 @@ public class MainActivity extends AppCompatActivity {
         locationListener = location -> runOnUiThread(() -> {
             if (location == null) return;
 
-            // Distance travelled while tracking (no path stored)
-            if (sessionActive) {
-                if (lastDistanceLoc != null) {
-                    sessionDistanceM += location.distanceTo(lastDistanceLoc);
-                }
-                lastDistanceLoc = location;
-            }
+            // ✅ distance tracking in foreground (background handled by LocationFogService)
+            StudyLogger.addDistanceSample(getApplicationContext(), location);
 
-            // Reveal fog (no tolerances)
             GeoPoint p = new GeoPoint(location.getLatitude(), location.getLongitude());
             fogOverlay.addPrimary(p);
             map.invalidate();
@@ -374,18 +283,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * <p> Calls {@link #sendFogServiceCommand(String action)}</p>
-     */
     private void startFogService() {
         sendFogServiceCommand(null);
     }
 
-    /**
-     * Sends an optional action command to {@link LocationFogService} by starting the service.
-     *
-     * @param action Action string to set on the Intent, or {@code null} to start without an action.
-     */
     private void sendFogServiceCommand(String action) {
         Intent i = new Intent(this, LocationFogService.class);
         if (action != null) i.setAction(action);
@@ -399,30 +300,15 @@ public class MainActivity extends AppCompatActivity {
         } catch (RuntimeException ignored) {}
     }
 
-    /**
-     * Converts dp to px
-     *
-     * @return Converted dp
-     */
     private int dpToPx() {
         return Math.round((float) 48.0 * getResources().getDisplayMetrics().density);
     }
 
-    /**
-     * Scales a bitmap to a given dp size
-     *
-     * @param src Bitmap to scale
-     * @return Scaled bitmap
-     */
     private Bitmap scaleBitmapToDp(Bitmap src) {
         int px = dpToPx();
         return Bitmap.createScaledBitmap(src, px, px, true);
     }
 
-    /**
-     * If application has no location permission, request it.
-     * Otherwise, call {@link #enableLocationTracking()}
-     */
     private void checkLocationPermission() {
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                 ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
